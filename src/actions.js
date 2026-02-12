@@ -1,19 +1,17 @@
 module.exports = function (self) {
 	self.setActionDefinitions({
-		sample_action: {
-			name: 'My First Action',
-			options: [
-				{
-					id: 'num',
-					type: 'number',
-					label: 'Test',
-					default: 5,
-					min: 0,
-					max: 100,
-				},
-			],
+		navigate_next_event: {
+			name: 'Navigate to Next Session',
+			options: [],
 			callback: async (event) => {
-				console.log('Hello world!', event.options.num)
+				self.sendCommand('navigate_next_event')
+			},
+		},
+		navigate_previous_event: {
+			name: 'Navigate to Previous Session',
+			options: [],
+			callback: async (event) => {
+				self.sendCommand('navigate_previous_event')
 			},
 		},
 	})
