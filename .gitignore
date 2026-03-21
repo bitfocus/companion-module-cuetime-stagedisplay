@@ -2,8 +2,10 @@ node_modules/
 package-lock.json
 /pkg
 /*.tgz
-DEBUG-*
+DEBUG-*/
 /.yarn
 wget-log
 yarn-error.log
+/dist
+
 

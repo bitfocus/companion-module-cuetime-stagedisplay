@@ -1,10 +1,11 @@
 {
 	"name": "tougtechnologies-cuetime",
 	"version": "0.0.1",
-	"main": "src/main.js",
+	"main": "dist/main.js",
 	"scripts": {
 		"format": "prettier -w .",
-		"package": "companion-module-build"
+		"package": "tsc && companion-module-build",
+		"build": "tsc"
 	},
 	"license": "MIT",
 	"repository": {
