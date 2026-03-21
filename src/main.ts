@@ -1,15 +1,56 @@
-const { InstanceBase, Regex, runEntrypoint, InstanceStatus } = require('@companion-module/base')
-const UpgradeScripts = require('./upgrades')
-const UpdateActions = require('./actions')
-const UpdateFeedbacks = require('./feedbacks')
-const UpdateVariableDefinitions = require('./variables')
+import {
+	InstanceBase,
+	Regex,
+	runEntrypoint,
+	InstanceStatus,
+	SomeCompanionConfigField,
+	CompanionInputFieldTextInput,
+} from '@companion-module/base'
+import { UpgradeScripts } from './upgrades'
+import { UpdateActions } from './actions'
+import { UpdateFeedbacks } from './feedbacks'
+import { UpdateVariableDefinitions } from './variables'
 
-class ModuleInstance extends InstanceBase {
-	constructor(internal) {
+export interface Config {
+	host: string
+	port: string
+}
+
+interface ApiResponse {
+	success?: boolean
+	message?: string
+	control_center?: {
+		elapsed_time: number
+		timer: number
+		current_session_name: string
+		current_presenter_name: string
+		is_playing: boolean
+		is_glowing: boolean
+		is_blackout: boolean
+	}
+	view?: {
+		message_text: string
+	}
+}
+
+export interface ModuleInstance extends InstanceBase<Config> {
+	config: Config
+	variableInterval?: NodeJS.Timeout
+	sendCommand(commandType: string, params?: Record<string, unknown>): Promise<boolean>
+	updateActions(): void
+	updateFeedbacks(): void
+	updateVariableDefinitions(): void
+}
+
+class ModuleInstanceImpl extends InstanceBase<Config> implements ModuleInstance {
+	public config!: Config
+	public variableInterval?: NodeJS.Timeout
+
+	constructor(internal: unknown) {
 		super(internal)
 	}
 
-	async init(config, isFirstInit) {
+	async init(config: Config, isFirstInit: boolean): Promise<void> {
 		this.config = config
 
 		this.updateStatus(InstanceStatus.Ok)
@@ -21,19 +62,19 @@ class ModuleInstance extends InstanceBase {
 		this.updateVariables()
 		this.variableInterval = setInterval(() => this.updateVariables(), 5000)
 	}
-	// When module gets deleted
-	async destroy() {
+
+	async destroy(): Promise<void> {
 		this.log('debug', 'destroy')
 		if (this.variableInterval) {
 			clearInterval(this.variableInterval)
 		}
 	}
 
-	async configUpdated(config) {
+	async configUpdated(config: Config): Promise<void> {
 		this.config = config
 	}
 
-	async sendCommand(commandType, params = {}) {
+	async sendCommand(commandType: string, params: Record<string, unknown> = {}): Promise<boolean> {
 		const url = `http://${this.config.host}:${this.config.port}/api/command`
 		const body = {
 			type: commandType,
@@ -55,7 +96,7 @@ class ModuleInstance extends InstanceBase {
 				return false
 			}
 
-			const data = await response.json()
+			const data = (await response.json()) as ApiResponse
 
 			if (data && data.success === false) {
 				this.log('error', `Command failed: ${data.message || 'Unknown error'}`)
@@ -65,13 +106,13 @@ class ModuleInstance extends InstanceBase {
 			this.updateStatus(InstanceStatus.Ok)
 			return true
 		} catch (error) {
-			this.log('error', `HTTP request failed: ${error.message}`)
+			this.log('error', `HTTP request failed: ${error instanceof Error ? error.message : 'Unknown error'}`)
 			this.updateStatus(InstanceStatus.ConnectionFailure)
 			return false
 		}
 	}
 
-	async updateVariables() {
+	async updateVariables(): Promise<void> {
 		const url = `http://${this.config.host}:${this.config.port}/api/status?detailed=false`
 
 		try {
@@ -82,7 +123,7 @@ class ModuleInstance extends InstanceBase {
 				return
 			}
 
-			const data = await response.json()
+			const data = (await response.json()) as ApiResponse
 
 			if (data && data.success && data.control_center) {
 				const cc = data.control_center
@@ -96,16 +137,15 @@ class ModuleInstance extends InstanceBase {
 					is_playing: cc.is_playing ? 'Yes' : 'No',
 					is_glowing: cc.is_glowing ? 'Yes' : 'No',
 					is_blackout: cc.is_blackout ? 'Yes' : 'No',
-					message_text: view.message_text || '',
+					message_text: view?.message_text || '',
 				})
 			}
 		} catch (error) {
-			this.log('debug', `Status update failed: ${error.message}`)
+			this.log('debug', `Status update failed: ${error instanceof Error ? error.message : 'Unknown error'}`)
 		}
 	}
 
-	// Return config fields for web config
-	getConfigFields() {
+	getConfigFields(): SomeCompanionConfigField[] {
 		return [
 			{
 				type: 'textinput',
@@ -113,7 +153,7 @@ class ModuleInstance extends InstanceBase {
 				label: 'Target IP',
 				width: 8,
 				regex: Regex.IP,
-			},
+			} as CompanionInputFieldTextInput & { width: number },
 			{
 				type: 'textinput',
 				id: 'port',
@@ -121,21 +161,21 @@ class ModuleInstance extends InstanceBase {
 				width: 4,
 				regex: Regex.PORT,
 				default: '8080',
-			},
+			} as CompanionInputFieldTextInput & { width: number },
 		]
 	}
 
-	updateActions() {
+	updateActions(): void {
 		UpdateActions(this)
 	}
 
-	updateFeedbacks() {
+	updateFeedbacks(): void {
 		UpdateFeedbacks(this)
 	}
 
-	updateVariableDefinitions() {
+	updateVariableDefinitions(): void {
 		UpdateVariableDefinitions(this)
 	}
 }
 
-runEntrypoint(ModuleInstance, UpgradeScripts)
+runEntrypoint(ModuleInstanceImpl, UpgradeScripts)

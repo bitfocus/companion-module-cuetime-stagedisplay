@@ -1,4 +1,6 @@
-module.exports = function (self) {
+import { ModuleInstance } from './main'
+
+export function UpdateVariableDefinitions(self: ModuleInstance): void {
 	self.setVariableDefinitions([
 		{ variableId: 'elapsed_time', name: 'Elapsed Time (ms)' },
 		{ variableId: 'timer', name: 'Timer (ms)' },
