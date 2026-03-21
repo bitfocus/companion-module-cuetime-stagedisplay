@@ -4,3 +4,6 @@ package-lock.json
 /*.tgz
 DEBUG-*
 /.yarn
+wget-log
+yarn-error.log
+
