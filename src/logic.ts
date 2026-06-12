@@ -40,12 +40,27 @@ export interface SettingsStatus {
 	is_time_up_display: boolean
 }
 
+export interface SessionInfo {
+	id: string
+	index: number
+	start_time: number | null
+	duration: number
+	session_name: string
+	presenter_name?: string
+	is_playing: boolean
+}
+
+export interface SessionsStatus {
+	session_list: SessionInfo[]
+}
+
 export interface ApiResponse {
 	success?: boolean
 	message?: string
 	control_center?: ControlCenterStatus
 	view?: ViewStatus
 	settings?: SettingsStatus
+	sessions?: SessionsStatus
 }
 
 export interface VariableValues {
@@ -57,6 +72,8 @@ export interface VariableValues {
 	is_glowing: string
 	is_blackout: string
 	message_text: string
+	current_session_number: number
+	total_sessions: number
 }
 
 // ---- Host/port resolution ----
@@ -116,6 +133,10 @@ export function extractVariableValues(status: ApiResponse): VariableValues | nul
 
 	const cc = status.control_center
 	const view = status.view
+	const sessions = status.sessions
+
+	const current_session_number = cc.current_session_index !== undefined ? cc.current_session_index + 1 : 0
+	const total_sessions = sessions?.session_list?.length || 0
 
 	return {
 		elapsed_time: cc.elapsed_time || 0,
@@ -126,5 +147,7 @@ export function extractVariableValues(status: ApiResponse): VariableValues | nul
 		is_glowing: cc.is_glowing ? 'Yes' : 'No',
 		is_blackout: cc.is_blackout ? 'Yes' : 'No',
 		message_text: view?.message_text || '',
+		current_session_number,
+		total_sessions,
 	}
 }
