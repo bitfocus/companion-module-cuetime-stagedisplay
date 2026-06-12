@@ -1,19 +1,19 @@
-import { ModuleInstance } from './main'
+import { ModuleInstance } from './main.js'
 
 export function UpdateActions(self: ModuleInstance): void {
 	self.setActionDefinitions({
-		navigate_next_event: {
+		navigate_next_session: {
 			name: 'Navigate to Next Session',
 			options: [],
 			callback: async (event: any) => {
-				self.sendCommand('navigate_next_event')
+				self.sendCommand('navigate_next_session')
 			},
 		},
-		navigate_previous_event: {
+		navigate_previous_session: {
 			name: 'Navigate to Previous Session',
 			options: [],
 			callback: async (event: any) => {
-				self.sendCommand('navigate_previous_event')
+				self.sendCommand('navigate_previous_session')
 			},
 		},
 		resume_timer: {
@@ -24,7 +24,7 @@ export function UpdateActions(self: ModuleInstance): void {
 			},
 		},
 		pause_timer: {
-			name: 'Pause/Resume Timer',
+			name: 'Pause Timer',
 			options: [],
 			callback: async (event: any) => {
 				self.sendCommand('pause_timer')
@@ -46,23 +46,39 @@ export function UpdateActions(self: ModuleInstance): void {
 				self.sendCommand('add_time', { seconds: event.options.seconds })
 			},
 		},
-
+		subtract_time: {
+			name: 'Subtract Time',
+			options: [
+				{
+					type: 'number',
+					id: 'seconds',
+					label: 'Seconds to subtract',
+					default: 30,
+					min: 0,
+					max: 86400,
+				},
+			],
+			callback: async (event: any) => {
+				self.sendCommand('subtract_time', { seconds: event.options.seconds })
+			},
+		},
 		blackout: {
 			name: 'Blackout',
 			options: [
 				{
 					type: 'dropdown',
-					id: 'enabled',
-					label: 'Enable',
-					default: 'true',
+					id: 'action',
+					label: 'Action',
+					default: 'enable',
 					choices: [
-						{ id: 'true', label: 'Enable' },
-						{ id: 'false', label: 'Disable' },
+						{ id: 'enable', label: 'Enable' },
+						{ id: 'disable', label: 'Disable' },
+						{ id: 'toggle', label: 'Toggle' },
 					],
 				},
 			],
 			callback: async (event: any) => {
-				self.sendCommand('blackout', { enabled: event.options.enabled === 'true' })
+				self.sendCommand('blackout', { action: event.options.action })
 			},
 		},
 		set_glow: {
@@ -196,12 +212,37 @@ export function UpdateActions(self: ModuleInstance): void {
 						{ id: 'stopped', label: 'Stopped' },
 					],
 				},
+				{
+					type: 'textinput',
+					id: 'session_id',
+					label: 'Session ID (optional)',
+					default: '',
+				},
+				{
+					type: 'number',
+					id: 'flash_start_time_seconds',
+					label: 'Flash Start (seconds, optional)',
+					default: 0,
+					min: 0,
+					max: 86400,
+				},
+				{
+					type: 'number',
+					id: 'flash_length_seconds',
+					label: 'Flash Length (seconds, optional)',
+					default: 0,
+					min: 0,
+					max: 86400,
+				},
 			],
 			callback: async (event: any) => {
 				self.sendCommand('setup_timer', {
 					seconds: event.options.seconds,
 					mode: event.options.mode,
 					timer_state: event.options.timer_state,
+					...(event.options.session_id ? { session_id: event.options.session_id } : {}),
+					...(event.options.flash_start_time_seconds ? { flash_start_time_seconds: event.options.flash_start_time_seconds } : {}),
+					...(event.options.flash_length_seconds ? { flash_length_seconds: event.options.flash_length_seconds } : {}),
 				})
 			},
 		},

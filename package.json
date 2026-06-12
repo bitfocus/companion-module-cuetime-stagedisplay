@@ -1,11 +1,14 @@
 {
 	"name": "tougtechnologies-cuetime",
 	"version": "0.0.1",
+	"type": "module",
 	"main": "dist/main.js",
 	"scripts": {
 		"format": "prettier -w .",
-		"package": "tsc && companion-module-build",
-		"build": "tsc"
+		"generate-icons": "node scripts/generate-icons.mjs",
+		"build": "node scripts/generate-icons.mjs && tsc",
+		"package": "node scripts/generate-icons.mjs && tsc && companion-module-build",
+		"test": "vitest run"
 	},
 	"license": "MIT",
 	"repository": {
@@ -21,7 +24,9 @@
 	},
 	"devDependencies": {
 		"@companion-module/tools": "^3.0.1",
-		"prettier": "^3.8.3"
+		"@types/node": "^25.9.3",
+		"prettier": "^3.8.3",
+		"vitest": "^4.1.8"
 	},
 	"prettier": "@companion-module/tools/.prettierrc.json",
 	"packageManager": "yarn@4.12.0"

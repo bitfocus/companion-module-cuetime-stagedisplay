@@ -19,10 +19,16 @@
 	"type": "node22",
 	"api": "nodejs-ipc",
 	"apiVersion": "0.0.0",
-	"entrypoint": "../src/main.js"
+	"entrypoint": "../dist/main.js"
   },
   "legacyIds": [],
   "manufacturer": "CueTime.io",
   "products": ["CueTime"],
+  "bonjourQueries": {
+    "cuetime-display": {
+      "type": "_cuetime",
+      "protocol": "tcp"
+    }
+  },
   "keywords": []
 }
