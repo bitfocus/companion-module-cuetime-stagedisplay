@@ -6,8 +6,7 @@ import {
 	icon_play_pause,
 	icon_add_minute,
 	icon_subtrack_miniute,
-	icon_msg_1,
-	icon_msg_2,
+	icon_msg,
 	icon_frame,
 } from './generated-icons.js'
 
@@ -139,39 +138,20 @@ export function UpdatePresets(self: ModuleInstance): void {
 			],
 			feedbacks: [],
 		},
-		show_message_1: {
+		show_message: {
 			type: 'simple',
-			name: 'Show Message (Break Time)',
+			name: 'Show Message',
 			style: {
-				text: '',
+				text: 'M?',
 				size: 'auto',
-				color: 0xffffff,
+				color: 0x000000,
 				bgcolor: 0x000000,
-				png64: icon_msg_1,
+				png64: icon_msg,
 				show_topbar: false,
 			},
 			steps: [
 				{
-					down: [{ actionId: 'show_message', options: { text: 'Break Time', flash: 'disable' } }],
-					up: [],
-				},
-			],
-			feedbacks: [],
-		},
-		show_message_2: {
-			type: 'simple',
-			name: 'Show Message (Lunch)',
-			style: {
-				text: '',
-				size: 'auto',
-				color: 0xffffff,
-				bgcolor: 0x000000,
-				png64: icon_msg_2,
-				show_topbar: false,
-			},
-			steps: [
-				{
-					down: [{ actionId: 'show_message', options: { text: 'Lunch', flash: 'disable' } }],
+					down: [{ actionId: 'show_message', options: { text: 'Fill in message', flash: 'disable' } }],
 					up: [],
 				},
 			],
@@ -210,7 +190,6 @@ export function UpdatePresets(self: ModuleInstance): void {
 				size: '18',
 				color: 0xffffff,
 				bgcolor: 0x000000,
-				png64: icon_frame,
 				show_topbar: false,
 			},
 			steps: [
@@ -235,7 +214,6 @@ export function UpdatePresets(self: ModuleInstance): void {
 				size: '18',
 				color: 0xffffff,
 				bgcolor: 0x000000,
-				png64: icon_frame,
 				show_topbar: false,
 			},
 			steps: [
@@ -295,3 +273,4 @@ export function UpdatePresets(self: ModuleInstance): void {
 
 	self.setPresetDefinitions(structure, presets as any)
 }
+
