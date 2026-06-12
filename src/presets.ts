@@ -61,7 +61,7 @@ export function UpdatePresets(self: ModuleInstance): void {
 				color: 0xffffff,
 				bgcolor: 0x000000,
 				png64: icon_play_pause,
-				show_topbar: false,
+				show_topbar: true,
 			},
 			steps: [
 				{
@@ -242,7 +242,7 @@ export function UpdatePresets(self: ModuleInstance): void {
 				size: '18',
 				color: 0xffffff,
 				bgcolor: 0x000000,
-				show_topbar: false,
+				show_topbar: true,
 			},
 			steps: [
 				{
@@ -266,7 +266,7 @@ export function UpdatePresets(self: ModuleInstance): void {
 				size: '18',
 				color: 0xffffff,
 				bgcolor: 0x000000,
-				show_topbar: false,
+				show_topbar: true,
 			},
 			steps: [
 				{
@@ -291,7 +291,7 @@ export function UpdatePresets(self: ModuleInstance): void {
 				color: 0xffffff,
 				bgcolor: 0x000000,
 				png64: icon_frame,
-				show_topbar: false,
+				show_topbar: true,
 			},
 			steps: [
 				{
@@ -304,6 +304,56 @@ export function UpdatePresets(self: ModuleInstance): void {
 					feedbackId: 'is_playing',
 					options: {},
 					style: { bgcolor: 0x00ff00, color: 0xffffff },
+				},
+			],
+		},
+		previous_session: {
+			type: 'simple',
+			name: 'Previous Session',
+			style: {
+				text: '$(cuetime:previous_session_name)',
+				size: '14',
+				color: 0xffffff,
+				bgcolor: 0x000000,
+				png64: icon_frame,
+				show_topbar: false,
+			},
+			steps: [
+				{
+					down: [{ actionId: 'navigate_previous_session', options: {} }],
+					up: [],
+				},
+			],
+			feedbacks: [
+				{
+					feedbackId: 'has_previous_session',
+					options: {},
+					style: { bgcolor: 0x0080ff, color: 0xffffff },
+				},
+			],
+		},
+		next_session: {
+			type: 'simple',
+			name: 'Next Session',
+			style: {
+				text: '$(cuetime:next_session_name)',
+				size: '14',
+				color: 0xffffff,
+				bgcolor: 0x000000,
+				png64: icon_frame,
+				show_topbar: false,
+			},
+			steps: [
+				{
+					down: [{ actionId: 'navigate_next_session', options: {} }],
+					up: [],
+				},
+			],
+			feedbacks: [
+				{
+					feedbackId: 'has_next_session',
+					options: {},
+					style: { bgcolor: 0x0080ff, color: 0xffffff },
 				},
 			],
 		},
