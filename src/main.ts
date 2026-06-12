@@ -31,6 +31,7 @@ export interface ModuleInstance extends InstanceBase<ModuleInstanceTypes> {
 	config: Config
 	latestStatus: ApiResponse | null
 	connected: boolean
+	lastShownMessage: string | null
 	variableInterval?: ReturnType<typeof setInterval>
 	sendCommand(commandType: string, params?: Record<string, unknown>): Promise<boolean>
 	updateActions(): void
@@ -43,6 +44,7 @@ class ModuleInstanceImpl extends InstanceBase<ModuleInstanceTypes> implements Mo
 	public config!: Config
 	public latestStatus: ApiResponse | null = null
 	public connected: boolean = false
+	public lastShownMessage: string | null = null
 	public variableInterval?: ReturnType<typeof setInterval>
 
 	constructor(internal: unknown) {
