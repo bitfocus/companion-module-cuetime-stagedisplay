@@ -73,6 +73,20 @@ export function UpdateActions(self: ModuleInstance): void {
 				self.sendCommand('subtract_time', { seconds: event.options.seconds })
 			},
 		},
+		enable_blackout: {
+			name: 'Enable Blackout',
+			options: [],
+			callback: async (event: any) => {
+				await self.sendCommand('blackout', { enabled: true })
+			},
+		},
+		disable_blackout: {
+			name: 'Disable Blackout',
+			options: [],
+			callback: async (event: any) => {
+				await self.sendCommand('blackout', { enabled: false })
+			},
+		},
 		blackout: {
 			name: 'Blackout',
 			options: [

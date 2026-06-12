@@ -10,6 +10,8 @@ import {
 	icon_frame,
 	icon_flash,
 	icon_glow,
+	icon_eye,
+	icon_bar_eye,
 } from './generated-icons.js'
 
 export function UpdatePresets(self: ModuleInstance): void {
@@ -206,6 +208,31 @@ export function UpdatePresets(self: ModuleInstance): void {
 					feedbackId: 'is_glowing',
 					options: {},
 					style: { bgcolor: 0xffff00, color: 0x000000 },
+				},
+			],
+		},
+		blackout: {
+			type: 'simple',
+			name: 'Blackout',
+			style: {
+				text: '',
+				size: 'auto',
+				color: 0xffffff,
+				bgcolor: 0x000000,
+				png64: icon_bar_eye,
+				show_topbar: false,
+			},
+			steps: [
+				{
+					down: [{ actionId: 'blackout', options: { action: 'toggle' } }],
+					up: [],
+				},
+			],
+			feedbacks: [
+				{
+					feedbackId: 'is_blackout',
+					options: {},
+					style: { bgcolor: 0x000000, color: 0xffffff },
 				},
 			],
 		},
