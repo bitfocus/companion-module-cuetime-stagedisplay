@@ -23,6 +23,17 @@ export function UpdateActions(self: ModuleInstance): void {
 				self.sendCommand('start_timer')
 			},
 		},
+		toggle_playback: {
+			name: 'Toggle Playback',
+			options: [],
+			callback: async (event: any) => {
+				if (self.latestStatus?.control_center?.is_playing) {
+					await self.sendCommand('pause_timer')
+				} else {
+					await self.sendCommand('start_timer')
+				}
+			},
+		},
 		pause_timer: {
 			name: 'Pause Timer',
 			options: [],
