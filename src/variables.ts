@@ -14,5 +14,7 @@ export function UpdateVariableDefinitions(self: ModuleInstance): void {
 		total_sessions: { name: 'Total Sessions' },
 		elapsed_formatted: { name: 'Elapsed Time' },
 		remaining_formatted: { name: 'Remaining Time' },
+		previous_session_name: { name: 'Previous Session Name' },
+		next_session_name: { name: 'Next Session Name' },
 	})
 }

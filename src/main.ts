@@ -141,12 +141,29 @@ class ModuleInstanceImpl extends InstanceBase<ModuleInstanceTypes> implements Mo
 
 			const data = (await statusResponse.json()) as ApiResponse
 
-			// Fetch session count from the lighter sessions endpoint
+			// Fetch session info from the lighter sessions endpoint
 			let total_sessions = 0
+			let previous_session_name = ''
+			let next_session_name = ''
 			if (sessionsResponse.ok) {
 				try {
-					const sessionsData = (await sessionsResponse.json()) as { session_list?: unknown[] }
-					total_sessions = sessionsData?.session_list?.length || 0
+					const sessionsBody = (await sessionsResponse.json()) as Record<string, unknown>
+					// Handle multiple possible response formats
+					const rawList = (sessionsBody?.sessions as any)?.session_list ?? sessionsBody?.session_list ?? []
+					const sessionList = Array.isArray(rawList) ? (rawList as Array<Record<string, unknown>>) : []
+					total_sessions = sessionList.length
+
+					if (total_sessions > 0) {
+						const cc = data?.control_center
+						const currentIndex = cc?.current_session_index ?? -1
+
+						if (currentIndex > 0) {
+							previous_session_name = (sessionList[currentIndex - 1]?.session_name as string) || ''
+						}
+						if (currentIndex >= 0 && currentIndex < total_sessions - 1) {
+							next_session_name = (sessionList[currentIndex + 1]?.session_name as string) || ''
+						}
+					}
 				} catch {
 					// Ignore sessions parse errors
 				}
@@ -173,6 +190,8 @@ class ModuleInstanceImpl extends InstanceBase<ModuleInstanceTypes> implements Mo
 					total_sessions,
 					elapsed_formatted: formatTime(view?.elapsed_time ?? cc.elapsed_time),
 					remaining_formatted: formatTime(cc.timer),
+					previous_session_name,
+					next_session_name,
 				})
 
 				this.checkFeedbacks(
