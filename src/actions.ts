@@ -177,14 +177,15 @@ export function UpdateActions(self: ModuleInstance): void {
 				},
 			],
 			callback: async (event: any) => {
-				const currentText = self.latestStatus?.view?.message_text
-				if (currentText === event.options.text) {
+				if (self.lastShownMessage === event.options.text) {
 					await self.sendCommand('hide_display')
+					self.lastShownMessage = null
 				} else {
 					await self.sendCommand('show_message', {
 						text: event.options.text,
 						flash: event.options.flash === 'enable',
 					})
+					self.lastShownMessage = event.options.text as string
 				}
 			},
 		},
@@ -192,6 +193,7 @@ export function UpdateActions(self: ModuleInstance): void {
 			name: 'Hide Display',
 			options: [],
 			callback: async (event: any) => {
+				self.lastShownMessage = null
 				self.sendCommand('hide_display')
 			},
 		},

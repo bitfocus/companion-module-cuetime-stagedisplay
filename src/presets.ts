@@ -8,6 +8,8 @@ import {
 	icon_subtrack_miniute,
 	icon_msg,
 	icon_frame,
+	icon_flash,
+	icon_glow,
 } from './generated-icons.js'
 
 export function UpdatePresets(self: ModuleInstance): void {
@@ -157,6 +159,56 @@ export function UpdatePresets(self: ModuleInstance): void {
 			],
 			feedbacks: [],
 		},
+		toggle_flash: {
+			type: 'simple',
+			name: 'Toggle Flash',
+			style: {
+				text: '',
+				size: 'auto',
+				color: 0xffffff,
+				bgcolor: 0x000000,
+				png64: icon_flash,
+				show_topbar: false,
+			},
+			steps: [
+				{
+					down: [{ actionId: 'toggle_flash', options: {} }],
+					up: [],
+				},
+			],
+			feedbacks: [
+				{
+					feedbackId: 'is_flashing',
+					options: {},
+					style: { bgcolor: 0xffa500, color: 0x000000 },
+				},
+			],
+		},
+		toggle_glow: {
+			type: 'simple',
+			name: 'Toggle Glow',
+			style: {
+				text: '',
+				size: 'auto',
+				color: 0xffffff,
+				bgcolor: 0x000000,
+				png64: icon_glow,
+				show_topbar: false,
+			},
+			steps: [
+				{
+					down: [{ actionId: 'toggle_glow', options: {} }],
+					up: [],
+				},
+			],
+			feedbacks: [
+				{
+					feedbackId: 'is_glowing',
+					options: {},
+					style: { bgcolor: 0xffff00, color: 0x000000 },
+				},
+			],
+		},
 		session_counter: {
 			type: 'simple',
 			name: 'Session Counter',
@@ -178,7 +230,7 @@ export function UpdatePresets(self: ModuleInstance): void {
 				{
 					feedbackId: 'is_playing',
 					options: {},
-					style: { bgcolor: 0x00ff00, color: 0x000000 },
+					style: { bgcolor: 0x00ff00, color: 0xffffff },
 				},
 			],
 		},
@@ -202,7 +254,7 @@ export function UpdatePresets(self: ModuleInstance): void {
 				{
 					feedbackId: 'is_playing',
 					options: {},
-					style: { bgcolor: 0x00ff00, color: 0x000000 },
+					style: { bgcolor: 0x00ff00, color: 0xffffff },
 				},
 			],
 		},
@@ -226,7 +278,7 @@ export function UpdatePresets(self: ModuleInstance): void {
 				{
 					feedbackId: 'is_playing',
 					options: {},
-					style: { bgcolor: 0x00ff00, color: 0x000000 },
+					style: { bgcolor: 0x00ff00, color: 0xffffff },
 				},
 			],
 		},
@@ -251,7 +303,7 @@ export function UpdatePresets(self: ModuleInstance): void {
 				{
 					feedbackId: 'is_playing',
 					options: {},
-					style: { bgcolor: 0x00ff00, color: 0x000000 },
+					style: { bgcolor: 0x00ff00, color: 0xffffff },
 				},
 			],
 		},
