@@ -210,6 +210,7 @@ export function UpdatePresets(self: ModuleInstance): void {
 				size: '18',
 				color: 0xffffff,
 				bgcolor: 0x000000,
+				png64: icon_frame,
 				show_topbar: false,
 			},
 			steps: [
@@ -234,6 +235,7 @@ export function UpdatePresets(self: ModuleInstance): void {
 				size: '18',
 				color: 0xffffff,
 				bgcolor: 0x000000,
+				png64: icon_frame,
 				show_topbar: false,
 			},
 			steps: [
