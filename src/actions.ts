@@ -177,10 +177,15 @@ export function UpdateActions(self: ModuleInstance): void {
 				},
 			],
 			callback: async (event: any) => {
-				self.sendCommand('show_message', {
-					text: event.options.text,
-					flash: event.options.flash === 'enable',
-				})
+				const currentText = self.latestStatus?.view?.message_text
+				if (currentText === event.options.text) {
+					await self.sendCommand('hide_display')
+				} else {
+					await self.sendCommand('show_message', {
+						text: event.options.text,
+						flash: event.options.flash === 'enable',
+					})
+				}
 			},
 		},
 		hide_display: {
