@@ -8,6 +8,7 @@ import {
 	icon_subtrack_miniute,
 	icon_msg_1,
 	icon_msg_2,
+	icon_frame,
 } from './generated-icons.js'
 
 export function UpdatePresets(self: ModuleInstance): void {
@@ -175,6 +176,31 @@ export function UpdatePresets(self: ModuleInstance): void {
 				},
 			],
 			feedbacks: [],
+		},
+		session_counter: {
+			type: 'simple',
+			name: 'Session Counter',
+			style: {
+				text: '$(cuetime:current_session_number)/$(cuetime:total_sessions)\n$(cuetime:current_session_name)',
+				size: '14',
+				color: 0xffffff,
+				bgcolor: 0x000000,
+				png64: icon_frame,
+				show_topbar: false,
+			},
+			steps: [
+				{
+					down: [],
+					up: [],
+				},
+			],
+			feedbacks: [
+				{
+					feedbackId: 'is_playing',
+					options: {},
+					style: { bgcolor: 0x00ff00, color: 0x000000 },
+				},
+			],
 		},
 	}
 

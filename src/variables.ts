@@ -10,5 +10,7 @@ export function UpdateVariableDefinitions(self: ModuleInstance): void {
 		is_glowing: { name: 'Is Glowing' },
 		is_blackout: { name: 'Is Blackout' },
 		message_text: { name: 'Message Text' },
+		current_session_number: { name: 'Current Session Number' },
+		total_sessions: { name: 'Total Sessions' },
 	})
 }

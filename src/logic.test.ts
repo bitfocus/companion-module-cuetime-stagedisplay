@@ -234,6 +234,8 @@ describe('extractVariableValues', () => {
 			is_glowing: 'No',
 			is_blackout: 'No',
 			message_text: 'Hello',
+			current_session_number: 0,
+			total_sessions: 0,
 		})
 	})
 

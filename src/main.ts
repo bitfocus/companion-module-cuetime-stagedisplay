@@ -119,25 +119,44 @@ class ModuleInstanceImpl extends InstanceBase<ModuleInstanceTypes> implements Mo
 	}
 
 	async updateVariables(): Promise<void> {
-		const url = `http://${this.resolveHost()}:${this.resolvePort()}/api/status`
+		const host = this.resolveHost()
+		const port = this.resolvePort()
+		const statusUrl = `http://${host}:${port}/api/status`
+		const sessionsUrl = `http://${host}:${port}/api/status/sessions`
 
 		try {
-			const response = await fetch(url)
+			const [statusResponse, sessionsResponse] = await Promise.all([
+				fetch(statusUrl),
+				fetch(sessionsUrl),
+			])
 
-			if (!response.ok) {
-				this.log('error', `Status request failed: ${response.status} ${response.statusText}`)
+			if (!statusResponse.ok) {
+				this.log('error', `Status request failed: ${statusResponse.status} ${statusResponse.statusText}`)
 				this.connected = false
 				this.checkFeedbacks('is_connected')
 				return
 			}
 
-			const data = (await response.json()) as ApiResponse
+			const data = (await statusResponse.json()) as ApiResponse
+
+			// Fetch session count from the lighter sessions endpoint
+			let total_sessions = 0
+			if (sessionsResponse.ok) {
+				try {
+					const sessionsData = (await sessionsResponse.json()) as { session_list?: unknown[] }
+					total_sessions = sessionsData?.session_list?.length || 0
+				} catch {
+					// Ignore sessions parse errors
+				}
+			}
 
 			if (data && data.success && data.control_center) {
 				const cc = data.control_center
 				const view = data.view
 
 				this.latestStatus = data
+
+				const current_session_number = cc.current_session_index !== undefined ? cc.current_session_index + 1 : 0
 
 				this.setVariableValues({
 					elapsed_time: cc.elapsed_time || 0,
@@ -148,6 +167,8 @@ class ModuleInstanceImpl extends InstanceBase<ModuleInstanceTypes> implements Mo
 					is_glowing: cc.is_glowing ? 'Yes' : 'No',
 					is_blackout: cc.is_blackout ? 'Yes' : 'No',
 					message_text: view?.message_text || '',
+					current_session_number,
+					total_sessions,
 				})
 
 				this.checkFeedbacks(
