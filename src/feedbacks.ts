@@ -1,5 +1,7 @@
 import { combineRgb } from '@companion-module/base'
 import { ModuleInstance } from './main.js'
+import { icon_eye, icon_bar_eye } from './generated-icons.js'
+import type { CompanionAdvancedFeedbackResult } from '@companion-module/base'
 import {
 	checkIsPlaying,
 	checkIsGlowing,
@@ -39,14 +41,21 @@ export function UpdateFeedbacks(self: ModuleInstance): void {
 		},
 		is_blackout: {
 			name: 'Blackout Mode Active',
-			type: 'boolean',
-			defaultStyle: {
-				bgcolor: combineRgb(255, 0, 0),
-				color: combineRgb(255, 255, 255),
-			},
+			type: 'advanced',
 			options: [],
-			callback: (_feedback: any) => {
-				return checkIsBlackout(self.latestStatus)
+			callback: (_feedback: any): CompanionAdvancedFeedbackResult => {
+				if (checkIsBlackout(self.latestStatus)) {
+					return {
+						bgcolor: combineRgb(255, 0, 0),
+						color: combineRgb(255, 255, 255),
+						png64: icon_eye,
+					}
+				}
+				return {
+					bgcolor: combineRgb(0, 0, 0),
+					color: combineRgb(255, 255, 255),
+					png64: icon_bar_eye,
+				}
 			},
 		},
 		is_flashing: {
