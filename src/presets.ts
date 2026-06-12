@@ -50,9 +50,9 @@ export function UpdatePresets(self: ModuleInstance): void {
 			],
 			feedbacks: [],
 		},
-		play_pause: {
+		toggle_playback: {
 			type: 'simple',
-			name: 'Start Timer',
+			name: 'Toggle Playback',
 			style: {
 				text: '',
 				size: 'auto',
@@ -63,7 +63,7 @@ export function UpdatePresets(self: ModuleInstance): void {
 			},
 			steps: [
 				{
-					down: [{ actionId: 'start_timer', options: {} }],
+					down: [{ actionId: 'toggle_playback', options: {} }],
 					up: [],
 				},
 			],
