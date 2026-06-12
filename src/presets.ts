@@ -151,7 +151,7 @@ export function UpdatePresets(self: ModuleInstance): void {
 			},
 			steps: [
 				{
-					down: [{ actionId: 'show_message', options: { text: 'Break Time', flash: false } }],
+					down: [{ actionId: 'show_message', options: { text: 'Break Time', flash: 'disable' } }],
 					up: [],
 				},
 			],
@@ -170,7 +170,7 @@ export function UpdatePresets(self: ModuleInstance): void {
 			},
 			steps: [
 				{
-					down: [{ actionId: 'show_message', options: { text: 'Lunch', flash: false } }],
+					down: [{ actionId: 'show_message', options: { text: 'Lunch', flash: 'disable' } }],
 					up: [],
 				},
 			],

@@ -144,17 +144,17 @@ export function UpdateActions(self: ModuleInstance): void {
 					type: 'dropdown',
 					id: 'flash',
 					label: 'Flash',
-					default: 'false',
+					default: 'disable',
 					choices: [
-						{ id: 'true', label: 'Enable' },
-						{ id: 'false', label: 'Disable' },
+						{ id: 'enable', label: 'Enable' },
+						{ id: 'disable', label: 'Disable' },
 					],
 				},
 			],
 			callback: async (event: any) => {
 				self.sendCommand('show_message', {
 					text: event.options.text,
-					flash: event.options.flash === 'true',
+					flash: event.options.flash === 'enable',
 				})
 			},
 		},
