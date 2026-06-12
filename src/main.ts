@@ -119,7 +119,7 @@ class ModuleInstanceImpl extends InstanceBase<ModuleInstanceTypes> implements Mo
 	}
 
 	async updateVariables(): Promise<void> {
-		const url = `http://${this.resolveHost()}:${this.resolvePort()}/api/status?detailed=false`
+		const url = `http://${this.resolveHost()}:${this.resolvePort()}/api/status`
 
 		try {
 			const response = await fetch(url)
