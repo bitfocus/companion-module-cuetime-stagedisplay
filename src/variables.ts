@@ -16,5 +16,7 @@ export function UpdateVariableDefinitions(self: ModuleInstance): void {
 		remaining_formatted: { name: 'Remaining Time' },
 		previous_session_name: { name: 'Previous Session Name' },
 		next_session_name: { name: 'Next Session Name' },
+		previous_session_presenter_name: { name: 'Previous Session Presenter Name' },
+		next_session_presenter_name: { name: 'Next Session Presenter Name' },
 	})
 }

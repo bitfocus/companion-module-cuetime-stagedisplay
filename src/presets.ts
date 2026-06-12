@@ -384,6 +384,106 @@ export function UpdatePresets(self: ModuleInstance): void {
 				},
 			],
 		},
+		next_session_presenter: {
+			type: 'simple',
+			name: 'Next Session Presenter',
+			style: {
+				text: '$(cuetime:next_session_presenter_name)',
+				size: '14',
+				color: 0xffffff,
+				bgcolor: 0x000000,
+				png64: icon_frame,
+				show_topbar: false,
+			},
+			steps: [
+				{
+					down: [{ actionId: 'navigate_next_session', options: {} }],
+					up: [],
+				},
+			],
+			feedbacks: [
+				{
+					feedbackId: 'has_next_session',
+					options: {},
+					style: { bgcolor: 0x0080ff, color: 0xffffff },
+				},
+			],
+		},
+		next_session_name_presenter: {
+			type: 'simple',
+			name: 'Next Session Name & Presenter',
+			style: {
+				text: '$(cuetime:next_session_name)\n$(cuetime:next_session_presenter_name)',
+				size: '14',
+				color: 0xffffff,
+				bgcolor: 0x000000,
+				png64: icon_frame,
+				show_topbar: false,
+			},
+			steps: [
+				{
+					down: [{ actionId: 'navigate_next_session', options: {} }],
+					up: [],
+				},
+			],
+			feedbacks: [
+				{
+					feedbackId: 'has_next_session',
+					options: {},
+					style: { bgcolor: 0x0080ff, color: 0xffffff },
+				},
+			],
+		},
+		previous_session_presenter: {
+			type: 'simple',
+			name: 'Previous Session Presenter',
+			style: {
+				text: '$(cuetime:previous_session_presenter_name)',
+				size: '14',
+				color: 0xffffff,
+				bgcolor: 0x000000,
+				png64: icon_frame,
+				show_topbar: false,
+			},
+			steps: [
+				{
+					down: [{ actionId: 'navigate_previous_session', options: {} }],
+					up: [],
+				},
+			],
+			feedbacks: [
+				{
+					feedbackId: 'has_previous_session',
+					options: {},
+					style: { bgcolor: 0x0080ff, color: 0xffffff },
+				},
+			],
+		},
+		previous_session_name_presenter: {
+			type: 'simple',
+			name: 'Previous Session Name & Presenter',
+			style: {
+				text: '$(cuetime:previous_session_name)\n$(cuetime:previous_session_presenter_name)',
+				size: '14',
+				color: 0xffffff,
+				bgcolor: 0x000000,
+				png64: icon_frame,
+				show_topbar: false,
+			},
+			steps: [
+				{
+					down: [{ actionId: 'navigate_previous_session', options: {} }],
+					up: [],
+				},
+			],
+			feedbacks: [
+				{
+					feedbackId: 'has_previous_session',
+					options: {},
+					style: { bgcolor: 0x0080ff, color: 0xffffff },
+				},
+			],
+		},
 	}
 
 	const structure: CompanionPresetSection[] = Object.keys(presets).map((id) => ({
