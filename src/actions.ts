@@ -7,7 +7,7 @@ export function UpdateActions(self: ModuleInstance): void {
 			options: [],
 			callback: async (event: any) => {
 				if (self.latestStatus?.control_center?.is_next_session) {
-					await self.sendCommand('navigate_next_event')
+					await self.sendCommand('navigate_next_session')
 				}
 			},
 		},
@@ -16,7 +16,7 @@ export function UpdateActions(self: ModuleInstance): void {
 			options: [],
 			callback: async (event: any) => {
 				if (self.latestStatus?.control_center?.is_previous_session) {
-					await self.sendCommand('navigate_previous_event')
+					await self.sendCommand('navigate_previous_session')
 				}
 			},
 		},
@@ -84,6 +84,10 @@ export function UpdateActions(self: ModuleInstance): void {
 				const ok = await self.sendCommand('blackout', { enabled: true })
 				if (ok) {
 					self.blackoutToggle = true
+					if (self.latestStatus?.control_center) {
+						self.latestStatus.control_center.is_blackout = true
+						self.checkFeedbacks('is_blackout')
+					}
 				}
 			},
 		},
@@ -94,6 +98,10 @@ export function UpdateActions(self: ModuleInstance): void {
 				const ok = await self.sendCommand('blackout', { enabled: false })
 				if (ok) {
 					self.blackoutToggle = false
+					if (self.latestStatus?.control_center) {
+						self.latestStatus.control_center.is_blackout = false
+						self.checkFeedbacks('is_blackout')
+					}
 				}
 			},
 		},
@@ -114,17 +122,42 @@ export function UpdateActions(self: ModuleInstance): void {
 			],
 			callback: async (event: any) => {
 				switch (event.options.action) {
-					case 'enable':
-						await self.sendCommand('blackout', { enabled: true })
+					case 'enable': {
+						const ok = await self.sendCommand('blackout', { enabled: true })
+						if (ok && self.latestStatus?.control_center) {
+							self.latestStatus.control_center.is_blackout = true
+							self.checkFeedbacks('is_blackout')
+						}
 						break
-					case 'disable':
-						await self.sendCommand('blackout', { enabled: false })
+					}
+					case 'disable': {
+						const ok = await self.sendCommand('blackout', { enabled: false })
+						if (ok && self.latestStatus?.control_center) {
+							self.latestStatus.control_center.is_blackout = false
+							self.checkFeedbacks('is_blackout')
+						}
 						break
+					}
 					case 'toggle':
-						const newState = !self.blackoutToggle
-						const ok = await self.sendCommand('blackout', { enabled: newState })
+						self.log('debug', `Blackout toggle: is_blackout from status = ${self.latestStatus?.control_center?.is_blackout}, blackoutToggle = ${self.blackoutToggle}`)
+						const currentState = self.latestStatus?.control_center?.is_blackout
+						let targetState: boolean
+						if (currentState === undefined) {
+							self.log('debug', 'Blackout toggle: no status yet, falling back to local toggle')
+							targetState = !self.blackoutToggle
+						} else {
+							targetState = !currentState
+						}
+						self.log('debug', `Blackout toggle: sending enabled=${targetState}`)
+						const ok = await self.sendCommand('blackout', { enabled: targetState })
+						self.log('debug', `Blackout toggle: sendCommand returned ${ok}`)
 						if (ok) {
-							self.blackoutToggle = newState
+							self.blackoutToggle = targetState
+							if (self.latestStatus?.control_center) {
+								self.latestStatus.control_center.is_blackout = targetState
+								self.log('debug', `Blackout toggle: updating feedback to is_blackout=${targetState}`)
+								self.checkFeedbacks('is_blackout')
+							}
 						}
 						break
 					default:
@@ -298,7 +331,7 @@ export function UpdateActions(self: ModuleInstance): void {
 					seconds: event.options.seconds,
 					mode: event.options.mode,
 					timer_state: event.options.timer_state,
-					...(event.options.session_id ? { event_id: event.options.session_id } : {}),
+					...(event.options.session_id ? { session_id: event.options.session_id } : {}),
 					...(event.options.flash_start_time_seconds ? { flash_start_time_seconds: event.options.flash_start_time_seconds } : {}),
 					...(event.options.flash_length_seconds ? { flash_length_seconds: event.options.flash_length_seconds } : {}),
 				})
