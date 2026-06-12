@@ -6,14 +6,14 @@ export function UpdateActions(self: ModuleInstance): void {
 			name: 'Navigate to Next Session',
 			options: [],
 			callback: async (event: any) => {
-				self.sendCommand('navigate_next_session')
+				self.sendCommand('navigate_next_event')
 			},
 		},
 		navigate_previous_session: {
 			name: 'Navigate to Previous Session',
 			options: [],
 			callback: async (event: any) => {
-				self.sendCommand('navigate_previous_session')
+				self.sendCommand('navigate_previous_event')
 			},
 		},
 		resume_timer: {
@@ -89,7 +89,21 @@ export function UpdateActions(self: ModuleInstance): void {
 				},
 			],
 			callback: async (event: any) => {
-				self.sendCommand('blackout', { action: event.options.action })
+				switch (event.options.action) {
+					case 'enable':
+						await self.sendCommand('blackout', { enabled: true })
+						break
+					case 'disable':
+						await self.sendCommand('blackout', { enabled: false })
+						break
+					case 'toggle':
+						await self.sendCommand('blackout', {
+							enabled: !self.latestStatus?.control_center?.is_blackout,
+						})
+						break
+					default:
+						await self.sendCommand('blackout', { enabled: true })
+				}
 			},
 		},
 		set_glow: {
@@ -251,7 +265,7 @@ export function UpdateActions(self: ModuleInstance): void {
 					seconds: event.options.seconds,
 					mode: event.options.mode,
 					timer_state: event.options.timer_state,
-					...(event.options.session_id ? { session_id: event.options.session_id } : {}),
+					...(event.options.session_id ? { event_id: event.options.session_id } : {}),
 					...(event.options.flash_start_time_seconds ? { flash_start_time_seconds: event.options.flash_start_time_seconds } : {}),
 					...(event.options.flash_length_seconds ? { flash_length_seconds: event.options.flash_length_seconds } : {}),
 				})
