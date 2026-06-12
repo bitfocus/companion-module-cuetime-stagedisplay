@@ -147,6 +147,8 @@ class ModuleInstanceImpl extends InstanceBase<ModuleInstanceTypes> implements Mo
 			let total_sessions = 0
 			let previous_session_name = ''
 			let next_session_name = ''
+			let previous_session_presenter_name = ''
+			let next_session_presenter_name = ''
 			if (sessionsResponse.ok) {
 				try {
 					const sessionsBody = (await sessionsResponse.json()) as Record<string, unknown>
@@ -160,10 +162,14 @@ class ModuleInstanceImpl extends InstanceBase<ModuleInstanceTypes> implements Mo
 						const currentIndex = cc?.current_session_index ?? -1
 
 						if (currentIndex > 0) {
-							previous_session_name = (sessionList[currentIndex - 1]?.session_name as string) || ''
+							const prev = sessionList[currentIndex - 1]
+							previous_session_name = (prev?.session_name as string) || ''
+							previous_session_presenter_name = (prev?.presenter_name as string) || ''
 						}
 						if (currentIndex >= 0 && currentIndex < total_sessions - 1) {
-							next_session_name = (sessionList[currentIndex + 1]?.session_name as string) || ''
+							const next = sessionList[currentIndex + 1]
+							next_session_name = (next?.session_name as string) || ''
+							next_session_presenter_name = (next?.presenter_name as string) || ''
 						}
 					}
 				} catch {
@@ -194,6 +200,8 @@ class ModuleInstanceImpl extends InstanceBase<ModuleInstanceTypes> implements Mo
 					remaining_formatted: formatTime(cc.timer),
 					previous_session_name,
 					next_session_name,
+					previous_session_presenter_name,
+					next_session_presenter_name,
 				})
 
 				// Sync local toggle state with actual device state
