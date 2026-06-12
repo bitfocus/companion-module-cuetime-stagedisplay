@@ -77,14 +77,20 @@ export function UpdateActions(self: ModuleInstance): void {
 			name: 'Enable Blackout',
 			options: [],
 			callback: async (event: any) => {
-				await self.sendCommand('blackout', { enabled: true })
+				const ok = await self.sendCommand('blackout', { enabled: true })
+				if (ok) {
+					self.blackoutToggle = true
+				}
 			},
 		},
 		disable_blackout: {
 			name: 'Disable Blackout',
 			options: [],
 			callback: async (event: any) => {
-				await self.sendCommand('blackout', { enabled: false })
+				const ok = await self.sendCommand('blackout', { enabled: false })
+				if (ok) {
+					self.blackoutToggle = false
+				}
 			},
 		},
 		blackout: {
@@ -111,9 +117,11 @@ export function UpdateActions(self: ModuleInstance): void {
 						await self.sendCommand('blackout', { enabled: false })
 						break
 					case 'toggle':
-						await self.sendCommand('blackout', {
-							enabled: !self.latestStatus?.control_center?.is_blackout,
-						})
+						const newState = !self.blackoutToggle
+						const ok = await self.sendCommand('blackout', { enabled: newState })
+						if (ok) {
+							self.blackoutToggle = newState
+						}
 						break
 					default:
 						await self.sendCommand('blackout', { enabled: true })

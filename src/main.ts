@@ -32,6 +32,7 @@ export interface ModuleInstance extends InstanceBase<ModuleInstanceTypes> {
 	latestStatus: ApiResponse | null
 	connected: boolean
 	lastShownMessage: string | null
+	blackoutToggle: boolean
 	variableInterval?: ReturnType<typeof setInterval>
 	sendCommand(commandType: string, params?: Record<string, unknown>): Promise<boolean>
 	updateActions(): void
@@ -45,6 +46,7 @@ class ModuleInstanceImpl extends InstanceBase<ModuleInstanceTypes> implements Mo
 	public latestStatus: ApiResponse | null = null
 	public connected: boolean = false
 	public lastShownMessage: string | null = null
+	public blackoutToggle: boolean = false
 	public variableInterval?: ReturnType<typeof setInterval>
 
 	constructor(internal: unknown) {
@@ -193,6 +195,9 @@ class ModuleInstanceImpl extends InstanceBase<ModuleInstanceTypes> implements Mo
 					previous_session_name,
 					next_session_name,
 				})
+
+				// Sync local toggle state with actual device state
+				this.blackoutToggle = !!cc.is_blackout
 
 				this.checkFeedbacks(
 					'is_playing',
