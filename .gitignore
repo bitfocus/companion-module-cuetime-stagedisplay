@@ -7,5 +7,6 @@ DEBUG-*/
 wget-log
 yarn-error.log
 /dist
+/src/generated-icons.ts
 
 

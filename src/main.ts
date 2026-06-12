@@ -1,50 +1,49 @@
 import {
 	InstanceBase,
 	Regex,
-	runEntrypoint,
 	InstanceStatus,
+	InstanceTypes,
 	SomeCompanionConfigField,
 	CompanionInputFieldTextInput,
 } from '@companion-module/base'
-import { UpgradeScripts } from './upgrades'
-import { UpdateActions } from './actions'
-import { UpdateFeedbacks } from './feedbacks'
-import { UpdateVariableDefinitions } from './variables'
+import { UpgradeScripts } from './upgrades.js'
+import { UpdateActions } from './actions.js'
+import { UpdateFeedbacks } from './feedbacks.js'
+import { UpdateVariableDefinitions } from './variables.js'
+import { UpdatePresets } from './presets.js'
+import { getEffectiveHost, getEffectivePort } from './logic.js'
+import type { ApiResponse } from './logic.js'
+import type { JsonObject } from '@companion-module/base'
 
-export interface Config {
+export interface Config extends JsonObject {
 	host: string
 	port: string
+	'cuetime-display': string | null
 }
 
-interface ApiResponse {
-	success?: boolean
-	message?: string
-	control_center?: {
-		elapsed_time: number
-		timer: number
-		current_session_name: string
-		current_presenter_name: string
-		is_playing: boolean
-		is_glowing: boolean
-		is_blackout: boolean
-	}
-	view?: {
-		message_text: string
-	}
-}
-
-export interface ModuleInstance extends InstanceBase<Config> {
+// eslint-disable-next-line @typescript-eslint/no-empty-object-type
+interface ModuleInstanceTypes extends InstanceTypes {
 	config: Config
-	variableInterval?: NodeJS.Timeout
+	secrets: undefined
+}
+
+export interface ModuleInstance extends InstanceBase<ModuleInstanceTypes> {
+	config: Config
+	latestStatus: ApiResponse | null
+	connected: boolean
+	variableInterval?: ReturnType<typeof setInterval>
 	sendCommand(commandType: string, params?: Record<string, unknown>): Promise<boolean>
 	updateActions(): void
 	updateFeedbacks(): void
 	updateVariableDefinitions(): void
+	updatePresets(): void
 }
 
-class ModuleInstanceImpl extends InstanceBase<Config> implements ModuleInstance {
+class ModuleInstanceImpl extends InstanceBase<ModuleInstanceTypes> implements ModuleInstance {
 	public config!: Config
-	public variableInterval?: NodeJS.Timeout
+	public latestStatus: ApiResponse | null = null
+	public connected: boolean = false
+	public variableInterval?: ReturnType<typeof setInterval>
 
 	constructor(internal: unknown) {
 		super(internal)
@@ -58,6 +57,7 @@ class ModuleInstanceImpl extends InstanceBase<Config> implements ModuleInstance 
 		this.updateActions()
 		this.updateFeedbacks()
 		this.updateVariableDefinitions()
+		this.updatePresets()
 
 		this.updateVariables()
 		this.variableInterval = setInterval(() => this.updateVariables(), 5000)
@@ -75,7 +75,7 @@ class ModuleInstanceImpl extends InstanceBase<Config> implements ModuleInstance 
 	}
 
 	async sendCommand(commandType: string, params: Record<string, unknown> = {}): Promise<boolean> {
-		const url = `http://${this.config.host}:${this.config.port}/api/command`
+		const url = `http://${this.resolveHost()}:${this.resolvePort()}/api/command`
 		const body = {
 			type: commandType,
 			...params,
@@ -92,7 +92,9 @@ class ModuleInstanceImpl extends InstanceBase<Config> implements ModuleInstance 
 
 			if (!response.ok) {
 				this.log('error', `HTTP request failed: ${response.status} ${response.statusText}`)
+				this.connected = false
 				this.updateStatus(InstanceStatus.ConnectionFailure)
+				this.checkFeedbacks('is_connected')
 				return false
 			}
 
@@ -103,23 +105,29 @@ class ModuleInstanceImpl extends InstanceBase<Config> implements ModuleInstance 
 				return false
 			}
 
+			this.connected = true
 			this.updateStatus(InstanceStatus.Ok)
+			this.checkFeedbacks('is_connected')
 			return true
 		} catch (error) {
 			this.log('error', `HTTP request failed: ${error instanceof Error ? error.message : 'Unknown error'}`)
+			this.connected = false
 			this.updateStatus(InstanceStatus.ConnectionFailure)
+			this.checkFeedbacks('is_connected')
 			return false
 		}
 	}
 
 	async updateVariables(): Promise<void> {
-		const url = `http://${this.config.host}:${this.config.port}/api/status?detailed=false`
+		const url = `http://${this.resolveHost()}:${this.resolvePort()}/api/status?detailed=false`
 
 		try {
 			const response = await fetch(url)
 
 			if (!response.ok) {
 				this.log('error', `Status request failed: ${response.status} ${response.statusText}`)
+				this.connected = false
+				this.checkFeedbacks('is_connected')
 				return
 			}
 
@@ -128,6 +136,8 @@ class ModuleInstanceImpl extends InstanceBase<Config> implements ModuleInstance 
 			if (data && data.success && data.control_center) {
 				const cc = data.control_center
 				const view = data.view
+
+				this.latestStatus = data
 
 				this.setVariableValues({
 					elapsed_time: cc.elapsed_time || 0,
@@ -139,28 +149,60 @@ class ModuleInstanceImpl extends InstanceBase<Config> implements ModuleInstance 
 					is_blackout: cc.is_blackout ? 'Yes' : 'No',
 					message_text: view?.message_text || '',
 				})
+
+				this.checkFeedbacks(
+					'is_playing',
+					'is_glowing',
+					'is_blackout',
+					'is_flashing',
+					'has_previous_session',
+					'has_next_session',
+					'message_showing',
+					'is_connected',
+					'is_time_up_display'
+				)
 			}
+			this.connected = true
+			this.checkFeedbacks('is_connected')
 		} catch (error) {
 			this.log('debug', `Status update failed: ${error instanceof Error ? error.message : 'Unknown error'}`)
+			this.connected = false
+			this.checkFeedbacks('is_connected')
 		}
+	}
+
+	private resolveHost(): string {
+		return getEffectiveHost(this.config)
+	}
+
+	private resolvePort(): string {
+		return getEffectivePort(this.config)
 	}
 
 	getConfigFields(): SomeCompanionConfigField[] {
 		return [
 			{
+				type: 'bonjour-device',
+				id: 'cuetime-display',
+				label: 'Discovered CueTime Displays',
+				width: 12,
+			},
+			{
 				type: 'textinput',
 				id: 'host',
-				label: 'Target IP',
+				label: 'Target IP (manual)',
 				width: 8,
 				regex: Regex.IP,
+				isVisibleExpression: '$(cuetime-display:cuetime-display) == null',
 			} as CompanionInputFieldTextInput & { width: number },
 			{
 				type: 'textinput',
 				id: 'port',
-				label: 'Target Port',
+				label: 'Target Port (manual)',
 				width: 4,
 				regex: Regex.PORT,
 				default: '8080',
+				isVisibleExpression: '$(cuetime-display:cuetime-display) == null',
 			} as CompanionInputFieldTextInput & { width: number },
 		]
 	}
@@ -176,6 +218,10 @@ class ModuleInstanceImpl extends InstanceBase<Config> implements ModuleInstance 
 	updateVariableDefinitions(): void {
 		UpdateVariableDefinitions(this)
 	}
+
+	updatePresets(): void {
+		UpdatePresets(this)
+	}
 }
 
-runEntrypoint(ModuleInstanceImpl, UpgradeScripts)
+export default ModuleInstanceImpl
