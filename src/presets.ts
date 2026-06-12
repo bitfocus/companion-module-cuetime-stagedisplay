@@ -357,6 +357,11 @@ export function UpdatePresets(self: ModuleInstance): void {
 					options: {},
 					style: { bgcolor: 0x0080ff, color: 0xffffff },
 				},
+				{
+					feedbackId: 'no_previous_session',
+					options: {},
+					style: { bgcolor: 0xffa500, color: 0x000000 },
+				},
 			],
 		},
 		next_session: {
@@ -381,6 +386,11 @@ export function UpdatePresets(self: ModuleInstance): void {
 					feedbackId: 'has_next_session',
 					options: {},
 					style: { bgcolor: 0x0080ff, color: 0xffffff },
+				},
+				{
+					feedbackId: 'no_next_session',
+					options: {},
+					style: { bgcolor: 0xffa500, color: 0x000000 },
 				},
 			],
 		},
@@ -407,6 +417,11 @@ export function UpdatePresets(self: ModuleInstance): void {
 					options: {},
 					style: { bgcolor: 0x0080ff, color: 0xffffff },
 				},
+				{
+					feedbackId: 'no_next_session',
+					options: {},
+					style: { bgcolor: 0xffa500, color: 0x000000 },
+				},
 			],
 		},
 		next_session_name_presenter: {
@@ -431,6 +446,11 @@ export function UpdatePresets(self: ModuleInstance): void {
 					feedbackId: 'has_next_session',
 					options: {},
 					style: { bgcolor: 0x0080ff, color: 0xffffff },
+				},
+				{
+					feedbackId: 'no_next_session',
+					options: {},
+					style: { bgcolor: 0xffa500, color: 0x000000 },
 				},
 			],
 		},
@@ -457,6 +477,11 @@ export function UpdatePresets(self: ModuleInstance): void {
 					options: {},
 					style: { bgcolor: 0x0080ff, color: 0xffffff },
 				},
+				{
+					feedbackId: 'no_previous_session',
+					options: {},
+					style: { bgcolor: 0xffa500, color: 0x000000 },
+				},
 			],
 		},
 		previous_session_name_presenter: {
@@ -481,6 +506,11 @@ export function UpdatePresets(self: ModuleInstance): void {
 					feedbackId: 'has_previous_session',
 					options: {},
 					style: { bgcolor: 0x0080ff, color: 0xffffff },
+				},
+				{
+					feedbackId: 'no_previous_session',
+					options: {},
+					style: { bgcolor: 0xffa500, color: 0x000000 },
 				},
 			],
 		},

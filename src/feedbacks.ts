@@ -82,6 +82,18 @@ export function UpdateFeedbacks(self: ModuleInstance): void {
 				return checkHasPreviousSession(self.latestStatus)
 			},
 		},
+		no_previous_session: {
+			name: 'No Previous Session',
+			type: 'boolean',
+			defaultStyle: {
+				bgcolor: combineRgb(255, 165, 0),
+				color: combineRgb(0, 0, 0),
+			},
+			options: [],
+			callback: (_feedback: any) => {
+				return !checkHasPreviousSession(self.latestStatus)
+			},
+		},
 		has_next_session: {
 			name: 'Next Session Exists',
 			type: 'boolean',
@@ -92,6 +104,18 @@ export function UpdateFeedbacks(self: ModuleInstance): void {
 			options: [],
 			callback: (_feedback: any) => {
 				return checkHasNextSession(self.latestStatus)
+			},
+		},
+		no_next_session: {
+			name: 'No Next Session',
+			type: 'boolean',
+			defaultStyle: {
+				bgcolor: combineRgb(255, 165, 0),
+				color: combineRgb(0, 0, 0),
+			},
+			options: [],
+			callback: (_feedback: any) => {
+				return !checkHasNextSession(self.latestStatus)
 			},
 		},
 		message_showing: {

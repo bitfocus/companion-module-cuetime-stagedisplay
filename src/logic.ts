@@ -57,6 +57,7 @@ export interface SessionsStatus {
 export interface ApiResponse {
 	success?: boolean
 	message?: string
+	code?: string
 	control_center?: ControlCenterStatus
 	view?: ViewStatus
 	settings?: SettingsStatus

@@ -94,18 +94,29 @@ class ModuleInstanceImpl extends InstanceBase<ModuleInstanceTypes> implements Mo
 				body: JSON.stringify(body),
 			})
 
-			if (!response.ok) {
-				this.log('error', `HTTP request failed: ${response.status} ${response.statusText}`)
-				this.connected = false
-				this.updateStatus(InstanceStatus.ConnectionFailure)
-				this.checkFeedbacks('is_connected')
+			// Try to parse the API response body for error details
+			let data: ApiResponse | null = null
+			try {
+				data = (await response.json()) as ApiResponse
+			} catch {
+				// Response body is not valid JSON — ignore
+			}
+
+			// Check API-level errors first (success: false with a message)
+			if (data && data.success === false) {
+				this.log('warn', `Command '${commandType}' rejected: ${data.message || data.code || 'Unknown error'}`)
 				return false
 			}
 
-			const data = (await response.json()) as ApiResponse
-
-			if (data && data.success === false) {
-				this.log('error', `Command failed: ${data.message || 'Unknown error'}`)
+			// Check HTTP-level errors
+			if (!response.ok) {
+				const level = response.status >= 500 ? 'error' : 'warn'
+				this.log(level, `Command '${commandType}' failed: ${response.status} ${response.statusText}`)
+				if (response.status >= 500) {
+					this.connected = false
+					this.updateStatus(InstanceStatus.ConnectionFailure)
+					this.checkFeedbacks('is_connected')
+				}
 				return false
 			}
 

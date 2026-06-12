@@ -6,14 +6,18 @@ export function UpdateActions(self: ModuleInstance): void {
 			name: 'Navigate to Next Session',
 			options: [],
 			callback: async (event: any) => {
-				self.sendCommand('navigate_next_event')
+				if (self.latestStatus?.control_center?.is_next_session) {
+					await self.sendCommand('navigate_next_event')
+				}
 			},
 		},
 		navigate_previous_session: {
 			name: 'Navigate to Previous Session',
 			options: [],
 			callback: async (event: any) => {
-				self.sendCommand('navigate_previous_event')
+				if (self.latestStatus?.control_center?.is_previous_session) {
+					await self.sendCommand('navigate_previous_event')
+				}
 			},
 		},
 		resume_timer: {
