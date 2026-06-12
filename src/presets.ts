@@ -240,7 +240,7 @@ export function UpdatePresets(self: ModuleInstance): void {
 			type: 'simple',
 			name: 'Session Counter',
 			style: {
-				text: '$(cuetime:current_session_number)/$(cuetime:total_sessions)\n$(cuetime:current_session_name)',
+				text: '$(cuetime:current_session_number)/$(cuetime:total_sessions)',
 				size: '14',
 				color: 0xffffff,
 				bgcolor: 0x000000,
@@ -532,4 +532,3 @@ export function UpdatePresets(self: ModuleInstance): void {
 
 	self.setPresetDefinitions(structure, presets as any)
 }
-
