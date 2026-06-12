@@ -11,7 +11,7 @@ import { UpdateActions } from './actions.js'
 import { UpdateFeedbacks } from './feedbacks.js'
 import { UpdateVariableDefinitions } from './variables.js'
 import { UpdatePresets } from './presets.js'
-import { getEffectiveHost, getEffectivePort } from './logic.js'
+import { getEffectiveHost, getEffectivePort, formatTime } from './logic.js'
 import type { ApiResponse } from './logic.js'
 import type { JsonObject } from '@companion-module/base'
 
@@ -169,6 +169,8 @@ class ModuleInstanceImpl extends InstanceBase<ModuleInstanceTypes> implements Mo
 					message_text: view?.message_text || '',
 					current_session_number,
 					total_sessions,
+					elapsed_formatted: formatTime(cc.elapsed_time),
+					remaining_formatted: formatTime(cc.timer),
 				})
 
 				this.checkFeedbacks(

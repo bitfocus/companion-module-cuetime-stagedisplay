@@ -12,5 +12,7 @@ export function UpdateVariableDefinitions(self: ModuleInstance): void {
 		message_text: { name: 'Message Text' },
 		current_session_number: { name: 'Current Session Number' },
 		total_sessions: { name: 'Total Sessions' },
+		elapsed_formatted: { name: 'Elapsed Time' },
+		remaining_formatted: { name: 'Remaining Time' },
 	})
 }

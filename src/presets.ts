@@ -202,6 +202,79 @@ export function UpdatePresets(self: ModuleInstance): void {
 				},
 			],
 		},
+		elapsed_time: {
+			type: 'simple',
+			name: 'Elapsed Time',
+			style: {
+				text: '$(cuetime:elapsed_formatted)',
+				size: '18',
+				color: 0xffffff,
+				bgcolor: 0x000000,
+				show_topbar: false,
+			},
+			steps: [
+				{
+					down: [],
+					up: [],
+				},
+			],
+			feedbacks: [
+				{
+					feedbackId: 'is_playing',
+					options: {},
+					style: { bgcolor: 0x00ff00, color: 0x000000 },
+				},
+			],
+		},
+		remaining_time: {
+			type: 'simple',
+			name: 'Remaining Time',
+			style: {
+				text: '$(cuetime:remaining_formatted)',
+				size: '18',
+				color: 0xffffff,
+				bgcolor: 0x000000,
+				show_topbar: false,
+			},
+			steps: [
+				{
+					down: [],
+					up: [],
+				},
+			],
+			feedbacks: [
+				{
+					feedbackId: 'is_playing',
+					options: {},
+					style: { bgcolor: 0x00ff00, color: 0x000000 },
+				},
+			],
+		},
+		time_info: {
+			type: 'simple',
+			name: 'Time Info',
+			style: {
+				text: '$(cuetime:elapsed_formatted)\n$(cuetime:remaining_formatted)',
+				size: '14',
+				color: 0xffffff,
+				bgcolor: 0x000000,
+				png64: icon_frame,
+				show_topbar: false,
+			},
+			steps: [
+				{
+					down: [],
+					up: [],
+				},
+			],
+			feedbacks: [
+				{
+					feedbackId: 'is_playing',
+					options: {},
+					style: { bgcolor: 0x00ff00, color: 0x000000 },
+				},
+			],
+		},
 	}
 
 	const structure: CompanionPresetSection[] = Object.keys(presets).map((id) => ({
