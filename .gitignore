@@ -3,7 +3,14 @@ package-lock.json
 /pkg
 /*.tgz
 DEBUG-*/
-/.yarn
+/.yarn/cache
+/.yarn/install-state.gz
+/.yarn/unplugged
+/.yarn/build-state.yml
+/.yarn/patches
+/.yarn/plugins
+/.yarn/sdks
+/.yarn/versions
 wget-log
 yarn-error.log
 /dist
