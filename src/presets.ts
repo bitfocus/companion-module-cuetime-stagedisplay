@@ -182,7 +182,7 @@ export function UpdatePresets(self: ModuleInstance): void {
 				{
 					feedbackId: 'is_flashing',
 					options: {},
-					style: { bgcolor: 0xffa500, color: 0x000000 },
+					style: { bgcolor: 0xff0000, color: 0xffffff },
 				},
 			],
 		},
@@ -269,6 +269,7 @@ export function UpdatePresets(self: ModuleInstance): void {
 				size: '18',
 				color: 0xffffff,
 				bgcolor: 0x000000,
+				png64: icon_frame,
 				show_topbar: true,
 			},
 			steps: [
@@ -293,6 +294,7 @@ export function UpdatePresets(self: ModuleInstance): void {
 				size: '18',
 				color: 0xffffff,
 				bgcolor: 0x000000,
+				png64: icon_frame,
 				show_topbar: true,
 			},
 			steps: [
@@ -360,7 +362,7 @@ export function UpdatePresets(self: ModuleInstance): void {
 				{
 					feedbackId: 'no_previous_session',
 					options: {},
-					style: { bgcolor: 0xffa500, color: 0x000000 },
+					style: { bgcolor: 0xff0000, color: 0xffffff },
 				},
 			],
 		},
@@ -390,7 +392,7 @@ export function UpdatePresets(self: ModuleInstance): void {
 				{
 					feedbackId: 'no_next_session',
 					options: {},
-					style: { bgcolor: 0xffa500, color: 0x000000 },
+					style: { bgcolor: 0xff0000, color: 0xffffff },
 				},
 			],
 		},
@@ -420,7 +422,7 @@ export function UpdatePresets(self: ModuleInstance): void {
 				{
 					feedbackId: 'no_next_session',
 					options: {},
-					style: { bgcolor: 0xffa500, color: 0x000000 },
+					style: { bgcolor: 0xff0000, color: 0xffffff },
 				},
 			],
 		},
@@ -450,7 +452,7 @@ export function UpdatePresets(self: ModuleInstance): void {
 				{
 					feedbackId: 'no_next_session',
 					options: {},
-					style: { bgcolor: 0xffa500, color: 0x000000 },
+					style: { bgcolor: 0xff0000, color: 0xffffff },
 				},
 			],
 		},
@@ -480,7 +482,7 @@ export function UpdatePresets(self: ModuleInstance): void {
 				{
 					feedbackId: 'no_previous_session',
 					options: {},
-					style: { bgcolor: 0xffa500, color: 0x000000 },
+					style: { bgcolor: 0xff0000, color: 0xffffff },
 				},
 			],
 		},
@@ -510,7 +512,7 @@ export function UpdatePresets(self: ModuleInstance): void {
 				{
 					feedbackId: 'no_previous_session',
 					options: {},
-					style: { bgcolor: 0xffa500, color: 0x000000 },
+					style: { bgcolor: 0xff0000, color: 0xffffff },
 				},
 			],
 		},

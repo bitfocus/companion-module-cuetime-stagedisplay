@@ -94,12 +94,21 @@ class ModuleInstanceImpl extends InstanceBase<ModuleInstanceTypes> implements Mo
 				body: JSON.stringify(body),
 			})
 
+			// Debug log for blackout commands
+			if (commandType === 'blackout') {
+				this.log('debug', `Blackout sendCommand: body=${JSON.stringify(body)}, status=${response.status}`)
+			}
+
 			// Try to parse the API response body for error details
 			let data: ApiResponse | null = null
 			try {
 				data = (await response.json()) as ApiResponse
 			} catch {
 				// Response body is not valid JSON — ignore
+			}
+
+			if (commandType === 'blackout' && data) {
+				this.log('debug', `Blackout sendCommand: response=${JSON.stringify(data)}`)
 			}
 
 			// Check API-level errors first (success: false with a message)

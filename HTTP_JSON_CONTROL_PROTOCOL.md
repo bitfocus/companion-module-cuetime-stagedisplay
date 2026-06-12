@@ -261,17 +261,16 @@ Content-Type: application/json
 
 {
   "type": "blackout",
-  "action": "enable"
+  "enabled": true
 }
 ```
 
 Fields:
-- `action` (required): "enable", "disable", or "toggle"
+- `enabled` (optional boolean, default `true`): `true` enables blackout, `false` disables
 
 Actions:
-- "enable": Shows emergency blackout screen with large red text
-- "disable": Returns to previous display mode
-- "toggle": Toggles blackout state between enabled and disabled
+- `true`: Shows emergency blackout screen with large red text
+- `false`: Returns to previous display mode
 
 ### Visual Effects
 
