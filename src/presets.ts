@@ -147,7 +147,7 @@ export function UpdatePresets(self: ModuleInstance): void {
 			name: 'Show Message',
 			style: {
 				text: 'M?',
-				size: 'auto',
+				size: '24',
 				color: 0x000000,
 				bgcolor: 0x000000,
 				png64: icon_msg,
