@@ -64,7 +64,7 @@ class ModuleInstanceImpl extends InstanceBase<ModuleInstanceTypes> implements Mo
 		this.updatePresets()
 
 		this.updateVariables()
-		this.variableInterval = setInterval(() => this.updateVariables(), 5000)
+		this.variableInterval = setInterval(() => this.updateVariables(), 2000)
 	}
 
 	async destroy(): Promise<void> {
