@@ -3,7 +3,8 @@ import type { CompanionPresetDefinitions, CompanionPresetSection } from '@compan
 import {
 	icon_next,
 	icon_previous,
-	icon_play_pause,
+	icon_play,
+	icon_pause,
 	icon_add_minute,
 	icon_subtrack_miniute,
 	icon_msg,
@@ -62,7 +63,7 @@ export function UpdatePresets(self: ModuleInstance): void {
 				size: 'auto',
 				color: 0xffffff,
 				bgcolor: 0x000000,
-				png64: icon_play_pause,
+				png64: icon_play,
 				show_topbar: true,
 			},
 			steps: [
@@ -75,7 +76,7 @@ export function UpdatePresets(self: ModuleInstance): void {
 				{
 					feedbackId: 'is_playing',
 					options: {},
-					style: { bgcolor: 0x00ff00, color: 0x000000 },
+					style: { png64: icon_pause, bgcolor: 0x00ff00, color: 0x000000 },
 				},
 			],
 		},
@@ -87,7 +88,7 @@ export function UpdatePresets(self: ModuleInstance): void {
 				size: 'auto',
 				color: 0xffffff,
 				bgcolor: 0x000000,
-				png64: icon_play_pause,
+				png64: icon_pause,
 				show_topbar: false,
 			},
 			steps: [
