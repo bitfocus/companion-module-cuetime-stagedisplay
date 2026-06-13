@@ -6,10 +6,8 @@
 	"scripts": {
 		"format": "prettier -w .",
 		"generate-icons": "node scripts/generate-icons.mjs",
-		"prebuild": "node scripts/generate-icons.mjs",
-		"build": "tsc",
-		"prepackage": "node scripts/generate-icons.mjs",
-		"package": "tsc && companion-module-build",
+		"build": "node scripts/generate-icons.mjs && tsc",
+		"package": "node scripts/generate-icons.mjs && tsc && companion-module-build",
 		"test": "vitest run"
 	},
 	"license": "MIT",
