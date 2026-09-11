@@ -26,7 +26,7 @@
 		"@companion-module/tools": "^3.1.0",
 		"@types/node": "^25.9.3",
 		"prettier": "^3.8.3",
-		"vitest": "^4.1.8"
+		"vitest": "^4.1.11"
 	},
 	"resolutions": {
 		"esbuild": "^0.28.1"
