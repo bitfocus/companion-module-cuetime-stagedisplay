@@ -6,14 +6,17 @@ import {
 	SomeCompanionConfigField,
 	CompanionInputFieldTextInput,
 } from '@companion-module/base'
-import { UpgradeScripts } from './upgrades.js'
-import { UpdateActions } from './actions.js'
-import { UpdateFeedbacks } from './feedbacks.js'
-import { UpdateVariableDefinitions } from './variables.js'
-import { UpdatePresets } from './presets.js'
-import { getEffectiveHost, getEffectivePort, formatTime } from './logic.js'
-import type { ApiResponse } from './logic.js'
 import type { JsonObject } from '@companion-module/base'
+import { UpdateActions } from './actions.ts'
+import { UpdateFeedbacks } from './feedbacks.ts'
+import { UpdateVariableDefinitions } from './variables.ts'
+import { UpdatePresets } from './presets.ts'
+import { extractVariableValues, getEffectiveHost, getEffectivePort } from './logic.ts'
+import { ProtocolClient } from './protocol/client.ts'
+import type { ClientStatus, ResponseResult } from './protocol/client.ts'
+import { applyEvent, applyResponse, createInitialState } from './protocol/state.ts'
+import type { ProtocolState } from './protocol/state.ts'
+import type { CommandPayloads, CommandType } from './protocol/generated.ts'
 
 export interface Config extends JsonObject {
 	host: string
@@ -29,223 +32,160 @@ interface ModuleInstanceTypes extends InstanceTypes {
 
 export interface ModuleInstance extends InstanceBase<ModuleInstanceTypes> {
 	config: Config
-	latestStatus: ApiResponse | null
+	/** Latest state assembled from pushed events; the single source for feedbacks/variables. */
+	state: ProtocolState
 	connected: boolean
-	lastShownMessage: string | null
-	blackoutToggle: boolean
-	variableInterval?: ReturnType<typeof setInterval>
-	sendCommand(commandType: string, params?: Record<string, unknown>): Promise<boolean>
+	/** Sends a command, returning whether the device accepted it. */
+	sendCommand<K extends CommandType>(type: K, payload?: CommandPayloads[K]): Promise<boolean>
+	/** Sends a command and hands back the full reply, for actions that need its payload. */
+	sendCommandDetailed<K extends CommandType>(type: K, payload?: CommandPayloads[K]): Promise<ResponseResult>
 	updateActions(): void
 	updateFeedbacks(): void
 	updateVariableDefinitions(): void
 	updatePresets(): void
 }
 
+/** Every feedback this module defines; refreshed in one pass whenever state changes. */
+const FEEDBACK_IDS = [
+	'is_connected',
+	'is_playing',
+	'is_paused',
+	'is_idle',
+	'is_glowing',
+	'is_blackout',
+	'is_flashing',
+	'has_previous_session',
+	'no_previous_session',
+	'has_next_session',
+	'no_next_session',
+	'message_showing',
+	'is_time_up_display',
+	'is_time_up_flashing',
+] as const
+
 class ModuleInstanceImpl extends InstanceBase<ModuleInstanceTypes> implements ModuleInstance {
 	public config!: Config
-	public latestStatus: ApiResponse | null = null
-	public connected: boolean = false
-	public lastShownMessage: string | null = null
-	public blackoutToggle: boolean = false
-	public variableInterval?: ReturnType<typeof setInterval>
+	public state: ProtocolState = createInitialState()
+	public connected = false
+
+	private client: ProtocolClient | null = null
 
 	constructor(internal: unknown) {
 		super(internal)
 	}
 
-	async init(config: Config, isFirstInit: boolean): Promise<void> {
+	async init(config: Config, _isFirstInit: boolean): Promise<void> {
 		this.config = config
-
-		this.updateStatus(InstanceStatus.Ok)
 
 		this.updateActions()
 		this.updateFeedbacks()
 		this.updateVariableDefinitions()
 		this.updatePresets()
 
-		this.updateVariables()
-		this.variableInterval = setInterval(() => this.updateVariables(), 2000)
+		this.refreshFromState()
+		this.connect()
 	}
 
 	async destroy(): Promise<void> {
 		this.log('debug', 'destroy')
-		if (this.variableInterval) {
-			clearInterval(this.variableInterval)
-		}
+		this.client?.stop()
+		this.client = null
 	}
 
 	async configUpdated(config: Config): Promise<void> {
 		this.config = config
+		this.log('info', 'Configuration changed; reconnecting')
+		this.connect()
 	}
 
-	async sendCommand(commandType: string, params: Record<string, unknown> = {}): Promise<boolean> {
-		const url = `http://${this.resolveHost()}:${this.resolvePort()}/api/command`
-		const body = {
-			type: commandType,
-			...params,
+	private connect(): void {
+		this.client?.stop()
+
+		const host = this.resolveHost()
+		const port = Number(this.resolvePort())
+
+		this.client = new ProtocolClient({
+			host,
+			port,
+			log: (level, message) => this.log(level, message),
+			onEvent: (event) => {
+				this.state = applyEvent(this.state, event)
+				this.refreshFromState()
+			},
+			onResponse: (response) => {
+				this.state = applyResponse(this.state, response)
+				this.refreshFromState()
+			},
+			onStatusChange: (status, detail) => this.handleStatusChange(status, detail),
+		})
+
+		this.log('info', `Connecting to CueTime display at ws://${host}:${port}`)
+		this.client.start()
+	}
+
+	private handleStatusChange(status: ClientStatus, detail?: string): void {
+		this.connected = status === 'live'
+
+		switch (status) {
+			case 'live':
+				this.updateStatus(InstanceStatus.Ok)
+				break
+			case 'connecting':
+				this.updateStatus(InstanceStatus.Connecting)
+				break
+			default:
+				this.updateStatus(InstanceStatus.ConnectionFailure, detail)
+				break
+		}
+
+		this.refreshFromState()
+	}
+
+	/** Projects state onto variables and feedbacks. Cheap enough to run on every event. */
+	private refreshFromState(): void {
+		this.setVariableValues(extractVariableValues(this.state))
+		this.checkFeedbacks(...FEEDBACK_IDS)
+	}
+
+	async sendCommandDetailed<K extends CommandType>(
+		type: K,
+		payload: CommandPayloads[K] = {} as CommandPayloads[K],
+	): Promise<ResponseResult> {
+		if (!this.client) {
+			return {
+				ok: false,
+				type: 'error_response',
+				code: 'NOT_CONNECTED',
+				message: 'Protocol client is not initialised',
+			}
 		}
 
 		try {
-			const response = await fetch(url, {
-				method: 'POST',
-				headers: {
-					'Content-Type': 'application/json',
-				},
-				body: JSON.stringify(body),
-			})
-
-			// Debug log for blackout commands
-			if (commandType === 'blackout') {
-				this.log('debug', `Blackout sendCommand: body=${JSON.stringify(body)}, status=${response.status}`)
-			}
-
-			// Try to parse the API response body for error details
-			let data: ApiResponse | null = null
-			try {
-				data = (await response.json()) as ApiResponse
-			} catch {
-				// Response body is not valid JSON — ignore
-			}
-
-			if (commandType === 'blackout' && data) {
-				this.log('debug', `Blackout sendCommand: response=${JSON.stringify(data)}`)
-			}
-
-			// Check API-level errors first (success: false with a message)
-			if (data && data.success === false) {
-				this.log('warn', `Command '${commandType}' rejected: ${data.message || data.code || 'Unknown error'}`)
-				return false
-			}
-
-			// Check HTTP-level errors
-			if (!response.ok) {
-				const level = response.status >= 500 ? 'error' : 'warn'
-				this.log(level, `Command '${commandType}' failed: ${response.status} ${response.statusText}`)
-				if (response.status >= 500) {
-					this.connected = false
-					this.updateStatus(InstanceStatus.ConnectionFailure)
-					this.checkFeedbacks('is_connected')
-				}
-				return false
-			}
-
-			this.connected = true
-			this.updateStatus(InstanceStatus.Ok)
-			this.checkFeedbacks('is_connected')
-			return true
+			return await this.client.send(type, payload)
 		} catch (error) {
-			this.log('error', `HTTP request failed: ${error instanceof Error ? error.message : 'Unknown error'}`)
-			this.connected = false
-			this.updateStatus(InstanceStatus.ConnectionFailure)
-			this.checkFeedbacks('is_connected')
+			return {
+				ok: false,
+				type: 'error_response',
+				code: 'TRANSPORT_ERROR',
+				message: error instanceof Error ? error.message : String(error),
+			}
+		}
+	}
+
+	async sendCommand<K extends CommandType>(
+		type: K,
+		payload: CommandPayloads[K] = {} as CommandPayloads[K],
+	): Promise<boolean> {
+		const result = await this.sendCommandDetailed(type, payload)
+
+		if (!result.ok) {
+			const detail = [result.code, result.message].filter(Boolean).join(' — ')
+			this.log('warn', `CueTime rejected '${type}'${detail ? `: ${detail}` : ''}`)
 			return false
 		}
-	}
 
-	async updateVariables(): Promise<void> {
-		const host = this.resolveHost()
-		const port = this.resolvePort()
-		const statusUrl = `http://${host}:${port}/api/status`
-		const sessionsUrl = `http://${host}:${port}/api/status/sessions`
-
-		try {
-			const [statusResponse, sessionsResponse] = await Promise.all([
-				fetch(statusUrl),
-				fetch(sessionsUrl),
-			])
-
-			if (!statusResponse.ok) {
-				this.log('error', `Status request failed: ${statusResponse.status} ${statusResponse.statusText}`)
-				this.connected = false
-				this.checkFeedbacks('is_connected')
-				return
-			}
-
-			const data = (await statusResponse.json()) as ApiResponse
-
-			// Fetch session info from the lighter sessions endpoint
-			let total_sessions = 0
-			let previous_session_name = ''
-			let next_session_name = ''
-			let previous_session_presenter_name = ''
-			let next_session_presenter_name = ''
-			if (sessionsResponse.ok) {
-				try {
-					const sessionsBody = (await sessionsResponse.json()) as Record<string, unknown>
-					// Handle multiple possible response formats
-					const rawList = (sessionsBody?.sessions as any)?.session_list ?? sessionsBody?.session_list ?? []
-					const sessionList = Array.isArray(rawList) ? (rawList as Array<Record<string, unknown>>) : []
-					total_sessions = sessionList.length
-
-					if (total_sessions > 0) {
-						const cc = data?.control_center
-						const currentIndex = cc?.current_session_index ?? -1
-
-						if (currentIndex > 0) {
-							const prev = sessionList[currentIndex - 1]
-							previous_session_name = (prev?.session_name as string) || ''
-							previous_session_presenter_name = (prev?.presenter_name as string) || ''
-						}
-						if (currentIndex >= 0 && currentIndex < total_sessions - 1) {
-							const next = sessionList[currentIndex + 1]
-							next_session_name = (next?.session_name as string) || ''
-							next_session_presenter_name = (next?.presenter_name as string) || ''
-						}
-					}
-				} catch {
-					// Ignore sessions parse errors
-				}
-			}
-
-			if (data && data.success && data.control_center) {
-				const cc = data.control_center
-				const view = data.view
-
-				this.latestStatus = data
-
-				const current_session_number = cc.current_session_index !== undefined ? cc.current_session_index + 1 : 0
-
-				this.setVariableValues({
-					elapsed_time: cc.elapsed_time || 0,
-					timer: cc.timer || 0,
-					current_session_name: cc.current_session_name || '',
-					current_presenter_name: cc.current_presenter_name || '',
-					is_playing: cc.is_playing ? 'Yes' : 'No',
-					is_glowing: cc.is_glowing ? 'Yes' : 'No',
-					is_blackout: cc.is_blackout ? 'Yes' : 'No',
-					message_text: view?.message_text || '',
-					current_session_number,
-					total_sessions,
-					elapsed_formatted: formatTime(view?.elapsed_time ?? cc.elapsed_time),
-					remaining_formatted: formatTime(cc.timer),
-					previous_session_name,
-					next_session_name,
-					previous_session_presenter_name,
-					next_session_presenter_name,
-				})
-
-				// Sync local toggle state with actual device state
-				this.blackoutToggle = !!cc.is_blackout
-
-				this.checkFeedbacks(
-					'is_playing',
-					'is_glowing',
-					'is_blackout',
-					'is_flashing',
-					'has_previous_session',
-					'has_next_session',
-					'message_showing',
-					'is_connected',
-					'is_time_up_display'
-				)
-			}
-			this.connected = true
-			this.checkFeedbacks('is_connected')
-		} catch (error) {
-			this.log('debug', `Status update failed: ${error instanceof Error ? error.message : 'Unknown error'}`)
-			this.connected = false
-			this.checkFeedbacks('is_connected')
-		}
+		this.log('debug', `Sent '${type}'`)
+		return true
 	}
 
 	private resolveHost(): string {
@@ -278,7 +218,7 @@ class ModuleInstanceImpl extends InstanceBase<ModuleInstanceTypes> implements Mo
 				label: 'Target Port (manual)',
 				width: 4,
 				regex: Regex.PORT,
-				default: '8080',
+				default: '8081',
 				isVisibleExpression: '$(cuetime-display:cuetime-display) == null',
 			} as CompanionInputFieldTextInput & { width: number },
 		]

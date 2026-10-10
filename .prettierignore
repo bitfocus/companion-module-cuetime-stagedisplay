@@ -1,2 +1,7 @@
 package.json
 /LICENSE.md
+
+# Vendored / generated artifacts: reproduced from the far side, never hand-formatted.
+HTTP_JSON_CONTROL_PROTOCOL.md
+schemas/
+.yarn/

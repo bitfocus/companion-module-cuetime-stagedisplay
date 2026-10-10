@@ -6,8 +6,11 @@
 	"scripts": {
 		"format": "prettier -w .",
 		"generate-icons": "node scripts/generate-icons.mjs",
-		"build": "node scripts/generate-icons.mjs && tsc",
-		"package": "node scripts/generate-icons.mjs && tsc && companion-module-build",
+		"generate-protocol": "node scripts/generate-protocol.mjs && prettier -w src/protocol/generated.ts",
+		"typecheck": "tsc --noEmit",
+		"clean": "node scripts/clean.mjs",
+		"build": "node scripts/generate-icons.mjs && yarn generate-protocol && tsc --noEmit && node scripts/clean.mjs && tsc -p tsconfig.build.json",
+		"package": "node scripts/generate-icons.mjs && yarn generate-protocol && tsc --noEmit && node scripts/clean.mjs && tsc -p tsconfig.build.json && companion-module-build",
 		"test": "vitest run"
 	},
 	"license": "MIT",
@@ -20,11 +23,14 @@
 		"yarn": "^4"
 	},
 	"dependencies": {
-		"@companion-module/base": "~2.0.4"
+		"@companion-module/base": "~2.0.4",
+		"ws": "^8.22.0"
 	},
 	"devDependencies": {
 		"@companion-module/tools": "^3.0.1",
 		"@types/node": "^25.9.3",
+		"@types/ws": "^8.18.2",
+		"ajv": "^8.20.0",
 		"prettier": "^3.8.3",
 		"vitest": "^4.1.8"
 	},

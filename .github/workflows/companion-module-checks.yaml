@@ -15,3 +15,31 @@ jobs:
     uses: bitfocus/actions/.github/workflows/module-checks.yaml@main
     # with:
     #   upload-artifact: true # uncomment this to upload the built package as an artifact to this workflow that you can download and share with others
+
+  protocol-drift:
+    name: Generated protocol is up to date
+
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Enable corepack
+        run: corepack enable
+
+      - name: Install dependencies
+        run: yarn install --immutable
+
+      - name: Regenerate protocol code
+        run: yarn generate-protocol
+
+      - name: Fail if src/protocol/generated.ts drifted from schemas/protocol-schema.json
+        run: |
+          # `git diff` ignores untracked files, so a generated file that was never
+          # committed (or was deleted) would make this guard silently vacuous.
+          if [ -n "$(git status --porcelain -- src/protocol/generated.ts)" ]; then
+            echo "::error::src/protocol/generated.ts is out of date or not committed. Run 'yarn generate-protocol' and commit the result."
+            git --no-pager diff -- src/protocol/generated.ts
+            exit 1
+          fi
+          echo "src/protocol/generated.ts is in sync with the vendored schema."

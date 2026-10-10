@@ -1,8 +1,12 @@
 import { describe, it, expect } from 'vitest'
 import {
+	extractVariableValues,
+	formatTime,
 	getEffectiveHost,
 	getEffectivePort,
 	checkIsPlaying,
+	checkIsPaused,
+	checkIsIdle,
 	checkIsGlowing,
 	checkIsBlackout,
 	checkIsFlashing,
@@ -10,250 +14,151 @@ import {
 	checkHasNextSession,
 	checkMessageShowing,
 	checkIsTimeUpDisplay,
-	extractVariableValues,
-} from './logic.js'
-import type { ApiResponse } from './logic.js'
+	checkIsTimeUpFlashing,
+} from './logic.ts'
+import { applyEvent, createInitialState } from './protocol/state.ts'
+import type { ProtocolState } from './protocol/state.ts'
+import { controlCenterEvent, viewEvent, settingsEvent, sessionsEvent, helloEvent } from './protocol/fixtures.ts'
 
-// ---- Host/port resolution ----
-
-describe('getEffectiveHost', () => {
-	it('returns bonjour-discovered host when available', () => {
-		const result = getEffectiveHost({ host: '10.0.0.1', 'cuetime-display': '10.0.0.2' })
-		expect(result).toBe('10.0.0.2')
-	})
-
-	it('falls back to manual host when bonjour is null', () => {
-		const result = getEffectiveHost({ host: '10.0.0.1', 'cuetime-display': null })
-		expect(result).toBe('10.0.0.1')
-	})
-
-	it('returns empty string when neither is set', () => {
-		const result = getEffectiveHost({ host: '', 'cuetime-display': null })
-		expect(result).toBe('')
-	})
-})
-
-describe('getEffectivePort', () => {
-	it('returns the configured port', () => {
-		const result = getEffectivePort({ port: '9090' })
-		expect(result).toBe('9090')
-	})
-
-	it('defaults to 8080 when port is empty', () => {
-		const result = getEffectivePort({ port: '' })
-		expect(result).toBe('8080')
-	})
-
-	it('defaults to 8080 when port is undefined', () => {
-		const result = getEffectivePort({} as any)
-		expect(result).toBe('8080')
-	})
-})
-
-// ---- Status helper ----
-
-function makeStatus(overrides?: Partial<ApiResponse>): ApiResponse {
-	return {
-		success: true,
-		control_center: {
-			elapsed_time: 0,
-			timer: 0,
-			current_session_name: '',
-			current_presenter_name: '',
-			is_playing: false,
-			is_glowing: false,
-			is_blackout: false,
-			is_previous_session: false,
-			is_next_session: false,
-			flash_start_time: 0,
-			program_elapsed_time: 0,
-			program_time: 0,
-			current_session_id: '',
-			current_session_index: 0,
-		},
-		view: {
-			message_text: '',
-			presenter_name: '',
-			elapsed_time: 0,
-			program_elapsed_time: 0,
-			session_name: '',
-			progress_bar: 0,
-			session_id: null,
-			message_id: null,
-			is_flashing: false,
-			is_glowing: false,
-		},
-		settings: {
-			brightness: 80,
-			default_flash_start_time: 120,
-			default_flash_length: 30,
-			view_only_code: '',
-			is_time_up_display: true,
-		},
-		...overrides,
-	}
+/** Folds a list of events into a state, the way the module does as they arrive. */
+function stateFrom(...events: Parameters<typeof applyEvent>[1][]): ProtocolState {
+	return events.reduce<ProtocolState>((state, event) => applyEvent(state, event), createInitialState())
 }
 
-// ---- Boolean feedbacks ----
-
-describe('checkIsPlaying', () => {
-	it('returns true when is_playing is true', () => {
-		const status = makeStatus({ control_center: { is_playing: true } as any })
-		expect(checkIsPlaying(status)).toBe(true)
+describe('formatTime', () => {
+	it('renders MM:SS below an hour and HH:MM:SS above it', () => {
+		expect(formatTime(61000)).toBe('01:01')
+		expect(formatTime(3661000)).toBe('01:01:01')
 	})
 
-	it('returns false when is_playing is false', () => {
-		const status = makeStatus({ control_center: { is_playing: false } as any })
-		expect(checkIsPlaying(status)).toBe(false)
-	})
-
-	it('returns false when status is null', () => {
-		expect(checkIsPlaying(null)).toBe(false)
+	it('renders zero and negative durations as 00:00', () => {
+		// `timer` is the unsigned on-screen reading, so a negative is never meaningful.
+		expect(formatTime(0)).toBe('00:00')
+		expect(formatTime(-5000)).toBe('00:00')
 	})
 })
 
-describe('checkIsGlowing', () => {
-	it('returns true when is_glowing is true', () => {
-		const status = makeStatus({ control_center: { is_glowing: true } as any })
-		expect(checkIsGlowing(status)).toBe(true)
+describe('host and port resolution', () => {
+	it('prefers the Bonjour-discovered device over the manual host', () => {
+		expect(getEffectiveHost({ host: '10.0.0.5', 'cuetime-display': 'display.local' })).toBe('display.local')
 	})
 
-	it('returns false when is_glowing is false', () => {
-		expect(checkIsGlowing(makeStatus())).toBe(false)
+	it('falls back to the manual host, then to empty', () => {
+		expect(getEffectiveHost({ host: '10.0.0.5', 'cuetime-display': null })).toBe('10.0.0.5')
+		expect(getEffectiveHost({ host: '', 'cuetime-display': null })).toBe('')
 	})
 
-	it('returns false when status is null', () => {
-		expect(checkIsGlowing(null)).toBe(false)
-	})
-})
-
-describe('checkIsBlackout', () => {
-	it('returns true when is_blackout is true', () => {
-		const status = makeStatus({ control_center: { is_blackout: true } as any })
-		expect(checkIsBlackout(status)).toBe(true)
-	})
-
-	it('returns false when is_blackout is false', () => {
-		expect(checkIsBlackout(makeStatus())).toBe(false)
+	it('defaults to the WebSocket port, not the HTTP one', () => {
+		expect(getEffectivePort({ port: '8081' })).toBe('8081')
+		expect(getEffectivePort({ port: '' })).toBe('8081')
 	})
 })
-
-describe('checkIsFlashing', () => {
-	it('returns true when is_flashing is true', () => {
-		const status = makeStatus({ view: { is_flashing: true } as any })
-		expect(checkIsFlashing(status)).toBe(true)
-	})
-
-	it('returns false when is_flashing is false', () => {
-		expect(checkIsFlashing(makeStatus())).toBe(false)
-	})
-})
-
-describe('checkHasPreviousSession', () => {
-	it('returns true when is_previous_session is true', () => {
-		const status = makeStatus({ control_center: { is_previous_session: true } as any })
-		expect(checkHasPreviousSession(status)).toBe(true)
-	})
-
-	it('returns false when is_previous_session is false', () => {
-		expect(checkHasPreviousSession(makeStatus())).toBe(false)
-	})
-})
-
-describe('checkHasNextSession', () => {
-	it('returns true when is_next_session is true', () => {
-		const status = makeStatus({ control_center: { is_next_session: true } as any })
-		expect(checkHasNextSession(status)).toBe(true)
-	})
-
-	it('returns false when is_next_session is false', () => {
-		expect(checkHasNextSession(makeStatus())).toBe(false)
-	})
-})
-
-describe('checkMessageShowing', () => {
-	it('returns true when message_text is non-empty', () => {
-		const status = makeStatus({ view: { message_text: 'Break Time' } as any })
-		expect(checkMessageShowing(status)).toBe(true)
-	})
-
-	it('returns false when message_text is empty', () => {
-		expect(checkMessageShowing(makeStatus())).toBe(false)
-	})
-
-	it('returns false when message_text is undefined', () => {
-		const status = makeStatus({ view: {} as any })
-		expect(checkMessageShowing(status)).toBe(false)
-	})
-})
-
-describe('checkIsTimeUpDisplay', () => {
-	it('returns true when is_time_up_display is true', () => {
-		const status = makeStatus({ settings: { is_time_up_display: true } as any })
-		expect(checkIsTimeUpDisplay(status)).toBe(true)
-	})
-
-	it('returns false when is_time_up_display is false', () => {
-		const status = makeStatus({ settings: { is_time_up_display: false } as any })
-		expect(checkIsTimeUpDisplay(status)).toBe(false)
-	})
-
-	it('returns false when settings is missing', () => {
-		const status = makeStatus()
-		delete (status as any).settings
-		expect(checkIsTimeUpDisplay(status)).toBe(false)
-	})
-})
-
-// ---- Variable extraction ----
 
 describe('extractVariableValues', () => {
-	it('extracts values from a valid status response', () => {
-		const status = makeStatus({
-			control_center: {
-				elapsed_time: 5000,
-				timer: 120000,
-				current_session_name: 'Keynote',
-				current_presenter_name: 'Alice',
-				is_playing: true,
-				is_glowing: false,
+	it('returns neutral defaults for a state the device has not populated', () => {
+		const values = extractVariableValues(createInitialState())
+
+		expect(values.timer_run_state).toBe('idle')
+		expect(values.is_playing).toBe('No')
+		expect(values.current_session_number).toBe(0)
+		expect(values.total_sessions).toBe(0)
+		expect(values.elapsed_formatted).toBe('00:00')
+		expect(values.next_session_name).toBe('')
+	})
+
+	it('derives timer, session and neighbour values from pushed events', () => {
+		const state = stateFrom(
+			controlCenterEvent({
+				timer_run_state: 'running',
+				current_session_index: 0,
+				current_session_id: 'session-1',
+				current_session_name: 'Opening',
+				current_presenter_name: 'Ada',
+				elapsed_time: 305000,
+				timer: 655000,
+				is_next_session: true,
+				is_glowing: true,
 				is_blackout: false,
-			} as any,
-			view: {
-				message_text: 'Hello',
-			} as any,
-		})
+			}),
+			viewEvent({ message_text: 'Break', elapsed_time: 305000 }),
+			settingsEvent({ brightness: 42 }),
+			sessionsEvent([
+				{ id: 'session-1', index: 0, name: 'Opening', presenter_name: 'Ada', is_current: true },
+				{ id: 'session-2', index: 1, name: 'Keynote', presenter_name: 'Grace' },
+			]),
+			helloEvent({ version_name: '1.2.3' }),
+		)
 
-		const result = extractVariableValues(status)
-		expect(result).toEqual({
-			elapsed_time: 5000,
-			timer: 120000,
-			current_session_name: 'Keynote',
-			current_presenter_name: 'Alice',
-			is_playing: 'Yes',
-			is_glowing: 'No',
-			is_blackout: 'No',
-			message_text: 'Hello',
-			current_session_number: 0,
-			total_sessions: 0,
-		})
+		const values = extractVariableValues(state)
+
+		expect(values.timer_run_state).toBe('running')
+		expect(values.is_playing).toBe('Yes')
+		expect(values.is_glowing).toBe('Yes')
+		expect(values.is_blackout).toBe('No')
+		expect(values.current_session_name).toBe('Opening')
+		expect(values.current_presenter_name).toBe('Ada')
+		expect(values.elapsed_time).toBe(305000)
+		expect(values.timer).toBe(655000)
+		expect(values.elapsed_formatted).toBe('05:05')
+		expect(values.remaining_formatted).toBe('10:55')
+		expect(values.message_text).toBe('Break')
+
+		// Session numbering is 1-based for humans; the wire index is 0-based.
+		expect(values.current_session_number).toBe(1)
+		expect(values.total_sessions).toBe(2)
+		expect(values.previous_session_name).toBe('')
+		expect(values.next_session_name).toBe('Keynote')
+		expect(values.next_session_presenter_name).toBe('Grace')
+	})
+})
+
+describe('feedback checks', () => {
+	it('reads the run state from timer_run_state', () => {
+		const playing = stateFrom(controlCenterEvent({ timer_run_state: 'running' }))
+		expect(checkIsPlaying(playing)).toBe(true)
+		expect(checkIsPaused(playing)).toBe(false)
+		expect(checkIsIdle(playing)).toBe(false)
+
+		const paused = stateFrom(controlCenterEvent({ timer_run_state: 'paused' }))
+		expect(checkIsPlaying(paused)).toBe(false)
+		expect(checkIsPaused(paused)).toBe(true)
+		expect(checkIsIdle(paused)).toBe(false)
+
+		// A paused timer is on screen; an idle one is not. `is_playing` could not tell them apart.
+		expect(checkIsIdle(createInitialState())).toBe(true)
 	})
 
-	it('returns null when success is false', () => {
-		const status = makeStatus({ success: false })
-		expect(extractVariableValues(status)).toBeNull()
+	it('reads blackout and glow from the control center', () => {
+		const state = stateFrom(controlCenterEvent({ is_blackout: true, is_glowing: false }))
+		expect(checkIsBlackout(state)).toBe(true)
+		expect(checkIsGlowing(state)).toBe(false)
 	})
 
-	it('returns null when control_center is missing', () => {
-		const status = makeStatus()
-		delete (status as any).control_center
-		expect(extractVariableValues(status)).toBeNull()
+	it('reads navigation availability from the device flags', () => {
+		const state = stateFrom(
+			controlCenterEvent({ is_previous_session: true, is_next_session: false }),
+			// Sessions exist, but the device says there is no next session to go to.
+			sessionsEvent([{ id: 'a' }, { id: 'b' }, { id: 'c' }]),
+		)
+		expect(checkHasPreviousSession(state)).toBe(true)
+		expect(checkHasNextSession(state)).toBe(false)
 	})
 
-	it('handles missing view gracefully', () => {
-		const status = makeStatus()
-		delete (status as any).view
-		const result = extractVariableValues(status)
-		expect(result?.message_text).toBe('')
+	it('treats a whitespace-only message as not showing', () => {
+		expect(checkMessageShowing(createInitialState())).toBe(false)
+		expect(checkMessageShowing(stateFrom(viewEvent({ message_text: '   ' })))).toBe(false)
+		expect(checkMessageShowing(stateFrom(viewEvent({ message_text: 'Break' })))).toBe(true)
+	})
+
+	it('reads flashing and the time-is-up overlay from where vc146 reports them', () => {
+		const flashing = stateFrom(viewEvent({ is_flashing: true, is_time_up_flashing: true }))
+		expect(checkIsFlashing(flashing)).toBe(true)
+		expect(checkIsTimeUpFlashing(flashing)).toBe(true)
+
+		// The overlay is also reported on the control center, and is a settings-independent field.
+		expect(checkIsTimeUpFlashing(stateFrom(controlCenterEvent({ is_time_up_flashing: true })))).toBe(true)
+
+		expect(checkIsTimeUpDisplay(stateFrom(settingsEvent({ is_time_up_display: false })))).toBe(false)
+		expect(checkIsTimeUpDisplay(stateFrom(settingsEvent({ is_time_up_display: true })))).toBe(true)
 	})
 })

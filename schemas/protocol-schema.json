@@ -1,0 +1,1546 @@
+{
+  "oneOf": [
+    {"$ref": "#/$defs/Command"},
+    {"$ref": "#/$defs/Response"},
+    {"$ref": "#/$defs/Event"}
+  ],
+  "$schema": "https://json-schema.org/draft/2020-12/schema#",
+  "$defs": {
+    "Response": {
+      "oneOf": [
+        {"$ref": "#/$defs/Response/$defs/ack_response"},
+        {"$ref": "#/$defs/Response/$defs/control_center_status_response"},
+        {"$ref": "#/$defs/Response/$defs/error_response"},
+        {"$ref": "#/$defs/Response/$defs/messages_status_response"},
+        {"$ref": "#/$defs/Response/$defs/program_list_response"},
+        {"$ref": "#/$defs/Response/$defs/program_response"},
+        {"$ref": "#/$defs/Response/$defs/sessions_status_response"},
+        {"$ref": "#/$defs/Response/$defs/settings_status_response"},
+        {"$ref": "#/$defs/Response/$defs/status_response"},
+        {"$ref": "#/$defs/Response/$defs/view_status_response"}
+      ],
+      "$defs": {
+        "view_status_response": {
+          "type": "object",
+          "properties": {
+            "view": {"$ref": "#/$defs/Response/$defs/JsonViewStatus"},
+            "type": {"const": "view_status_response"},
+            "request_id": {"type": [
+              "string",
+              "null"
+            ]}
+          },
+          "required": [
+            "type",
+            "view"
+          ]
+        },
+        "JsonMessagesStatus": {
+          "type": "object",
+          "properties": {
+            "message_list": {
+              "type": "array",
+              "items": {"$ref": "#/$defs/Response/$defs/JsonMessageSummary"}
+            },
+            "is_flashing": {"type": "boolean"}
+          },
+          "required": [
+            "is_flashing",
+            "message_list"
+          ]
+        },
+        "JsonMessageSummary": {
+          "type": "object",
+          "properties": {
+            "is_showing": {"type": "boolean"},
+            "id": {"type": "string"},
+            "text": {"type": "string"}
+          },
+          "required": [
+            "id",
+            "is_showing",
+            "text"
+          ]
+        },
+        "JsonSettingsStatus": {
+          "type": "object",
+          "properties": {
+            "brightness": {"type": "integer"},
+            "is_time_up_display": {"type": "boolean"},
+            "default_flash_length": {"type": "number"},
+            "default_flash_start_time": {"type": "number"},
+            "view_only_code": {"type": [
+              "string",
+              "null"
+            ]},
+            "screen_version": {"type": "string"}
+          },
+          "required": [
+            "brightness",
+            "default_flash_length",
+            "default_flash_start_time",
+            "is_time_up_display",
+            "screen_version"
+          ]
+        },
+        "JsonSessionsStatus": {
+          "type": "object",
+          "properties": {"session_list": {
+            "type": "array",
+            "items": {"$ref": "#/$defs/Response/$defs/JsonSessionSummary"}
+          }},
+          "required": ["session_list"]
+        },
+        "JsonSessionSummary": {
+          "type": "object",
+          "properties": {
+            "notes": {"type": "string"},
+            "offset": {"type": [
+              "integer",
+              "null"
+            ]},
+            "index": {"type": "integer"},
+            "presenter_name": {"type": [
+              "string",
+              "null"
+            ]},
+            "version": {"type": "string"},
+            "duration": {"type": [
+              "integer",
+              "null"
+            ]},
+            "mode": {"type": "string"},
+            "started_at_timestamp": {"type": [
+              "integer",
+              "null"
+            ]},
+            "flash_start_time_seconds": {"type": "integer"},
+            "flash_length_seconds": {"type": "integer"},
+            "name": {"type": "string"},
+            "id": {"type": "string"},
+            "is_current": {"type": "boolean"}
+          },
+          "required": [
+            "flash_length_seconds",
+            "flash_start_time_seconds",
+            "id",
+            "index",
+            "is_current",
+            "mode",
+            "name",
+            "notes",
+            "version"
+          ]
+        },
+        "JsonControlCenterStatus": {
+          "type": "object",
+          "properties": {
+            "flash_start_time": {"type": "number"},
+            "is_next_session": {"type": "boolean"},
+            "current_presenter_name": {"type": "string"},
+            "current_session_name": {"type": "string"},
+            "current_session_id": {"type": "string"},
+            "current_session_index": {"type": "integer"},
+            "is_blackout": {"type": "boolean"},
+            "program_time": {"type": "number"},
+            "is_glowing": {"type": "boolean"},
+            "timer_run_state": {"type": "string"},
+            "is_time_up_flashing": {"type": "boolean"},
+            "timer": {"type": "number"},
+            "is_previous_session": {"type": "boolean"},
+            "elapsed_time": {"type": "number"},
+            "flash_length": {"type": "number"},
+            "program_elapsed_time": {"type": "number"}
+          },
+          "required": [
+            "current_presenter_name",
+            "current_session_id",
+            "current_session_index",
+            "current_session_name",
+            "elapsed_time",
+            "flash_length",
+            "flash_start_time",
+            "is_blackout",
+            "is_glowing",
+            "is_next_session",
+            "is_previous_session",
+            "is_time_up_flashing",
+            "program_elapsed_time",
+            "program_time",
+            "timer",
+            "timer_run_state"
+          ]
+        },
+        "settings_status_response": {
+          "type": "object",
+          "properties": {
+            "settings": {"$ref": "#/$defs/Response/$defs/JsonSettingsStatus"},
+            "type": {"const": "settings_status_response"},
+            "request_id": {"type": [
+              "string",
+              "null"
+            ]}
+          },
+          "required": [
+            "type",
+            "settings"
+          ]
+        },
+        "messages_status_response": {
+          "type": "object",
+          "properties": {
+            "messages": {"$ref": "#/$defs/Response/$defs/JsonMessagesStatus"},
+            "type": {"const": "messages_status_response"},
+            "request_id": {"type": [
+              "string",
+              "null"
+            ]}
+          },
+          "required": [
+            "type",
+            "messages"
+          ]
+        },
+        "sessions_status_response": {
+          "type": "object",
+          "properties": {
+            "sessions": {"$ref": "#/$defs/Response/$defs/JsonSessionsStatus"},
+            "type": {"const": "sessions_status_response"},
+            "request_id": {"type": [
+              "string",
+              "null"
+            ]}
+          },
+          "required": [
+            "type",
+            "sessions"
+          ]
+        },
+        "JsonViewStatus": {
+          "type": "object",
+          "properties": {
+            "is_time_up_flashing": {"type": "boolean"},
+            "session_name": {"type": "string"},
+            "message_text": {"type": "string"},
+            "is_flashing": {"type": "boolean"},
+            "elapsed_time": {"type": "number"},
+            "session_id": {"type": "string"},
+            "message_id": {"type": [
+              "string",
+              "null"
+            ]},
+            "presenter_name": {"type": "string"},
+            "progress_bar": {"type": "number"},
+            "is_glowing": {"type": "boolean"},
+            "program_elapsed_time": {"type": "number"}
+          },
+          "required": [
+            "elapsed_time",
+            "is_flashing",
+            "is_glowing",
+            "is_time_up_flashing",
+            "message_text",
+            "presenter_name",
+            "program_elapsed_time",
+            "progress_bar",
+            "session_id",
+            "session_name"
+          ]
+        },
+        "control_center_status_response": {
+          "type": "object",
+          "properties": {
+            "control_center": {"$ref": "#/$defs/Response/$defs/JsonControlCenterStatus"},
+            "type": {"const": "control_center_status_response"},
+            "request_id": {"type": [
+              "string",
+              "null"
+            ]}
+          },
+          "required": [
+            "type",
+            "control_center"
+          ]
+        },
+        "program_list_response": {
+          "type": "object",
+          "properties": {
+            "program_list": {
+              "type": "array",
+              "items": {"$ref": "#/$defs/Response/$defs/JsonProgramSummary"}
+            },
+            "type": {"const": "program_list_response"},
+            "request_id": {"type": [
+              "string",
+              "null"
+            ]}
+          },
+          "required": [
+            "type",
+            "program_list"
+          ]
+        },
+        "program_response": {
+          "type": "object",
+          "properties": {
+            "has_program": {"type": "boolean"},
+            "program": {"$ref": "#/$defs/Response/$defs/JsonProgram"},
+            "type": {"const": "program_response"},
+            "request_id": {"type": [
+              "string",
+              "null"
+            ]}
+          },
+          "required": [
+            "type",
+            "has_program"
+          ]
+        },
+        "JsonProgram": {
+          "type": "object",
+          "properties": {
+            "settings": {"$ref": "#/$defs/Response/$defs/JsonProgramSettings"},
+            "sessions": {
+              "type": "array",
+              "items": {"$ref": "#/$defs/Response/$defs/JsonSession"}
+            },
+            "user_id": {"type": [
+              "string",
+              "null"
+            ]},
+            "program_id": {"type": "string"},
+            "program_name": {"type": "string"},
+            "messages": {
+              "type": "array",
+              "items": {"$ref": "#/$defs/Response/$defs/JsonMessage"}
+            },
+            "version": {"type": "string"}
+          },
+          "required": [
+            "program_id",
+            "program_name",
+            "sessions",
+            "settings",
+            "version"
+          ]
+        },
+        "JsonMessage": {
+          "type": "object",
+          "properties": {
+            "is_flashing": {"type": "boolean"},
+            "is_showing": {"type": "boolean"},
+            "id": {"type": "string"},
+            "version": {"type": "string"},
+            "content": {"type": "string"}
+          },
+          "required": ["content"]
+        },
+        "error_response": {
+          "type": "object",
+          "properties": {
+            "code": {"type": "string"},
+            "type": {"const": "error_response"},
+            "message": {"type": "string"},
+            "request_id": {"type": [
+              "string",
+              "null"
+            ]}
+          },
+          "required": [
+            "type",
+            "code",
+            "message"
+          ]
+        },
+        "ack_response": {
+          "type": "object",
+          "properties": {
+            "type": {"const": "ack_response"},
+            "message": {"type": "string"},
+            "entity_id": {"type": [
+              "string",
+              "null"
+            ]},
+            "request_id": {"type": [
+              "string",
+              "null"
+            ]}
+          },
+          "required": [
+            "type",
+            "message"
+          ]
+        },
+        "JsonProgramSettings": {
+          "type": "object",
+          "properties": {
+            "flash_start_time_seconds": {"type": "integer"},
+            "flash_length_seconds": {"type": "integer"}
+          }
+        },
+        "status_response": {
+          "type": "object",
+          "properties": {
+            "settings": {"$ref": "#/$defs/Response/$defs/JsonSettingsStatus"},
+            "view": {"$ref": "#/$defs/Response/$defs/JsonViewStatus"},
+            "sessions": {"$ref": "#/$defs/Response/$defs/JsonSessionsStatus"},
+            "messages": {"$ref": "#/$defs/Response/$defs/JsonMessagesStatus"},
+            "control_center": {"$ref": "#/$defs/Response/$defs/JsonControlCenterStatus"},
+            "type": {"const": "status_response"},
+            "request_id": {"type": [
+              "string",
+              "null"
+            ]}
+          },
+          "required": ["type"]
+        },
+        "JsonSession": {
+          "type": "object",
+          "properties": {
+            "duration_seconds": {"type": [
+              "integer",
+              "null"
+            ]},
+            "mode": {"type": "string"},
+            "started_at_timestamp": {"type": [
+              "integer",
+              "null"
+            ]},
+            "notes": {"type": "string"},
+            "offset": {"type": [
+              "integer",
+              "null"
+            ]},
+            "flash_start_time_seconds": {"type": "integer"},
+            "flash_length_seconds": {"type": "integer"},
+            "name": {"type": "string"},
+            "id": {"type": "string"},
+            "presenter_name": {"type": [
+              "string",
+              "null"
+            ]},
+            "version": {"type": "string"}
+          },
+          "required": ["name"]
+        },
+        "JsonProgramSummary": {
+          "type": "object",
+          "properties": {
+            "program_id": {"type": "string"},
+            "name": {"type": "string"}
+          },
+          "required": [
+            "name",
+            "program_id"
+          ]
+        }
+      },
+      "description": "All com.tougtechnologies.cuetimedisplay.protocol.httpjson.JsonProtocolResponse variants"
+    },
+    "Command": {
+      "oneOf": [
+        {"$ref": "#/$defs/Command/$defs/add_message"},
+        {"$ref": "#/$defs/Command/$defs/add_session"},
+        {"$ref": "#/$defs/Command/$defs/add_time"},
+        {"$ref": "#/$defs/Command/$defs/delete_all_messages"},
+        {"$ref": "#/$defs/Command/$defs/delete_all_sessions"},
+        {"$ref": "#/$defs/Command/$defs/delete_message"},
+        {"$ref": "#/$defs/Command/$defs/delete_program"},
+        {"$ref": "#/$defs/Command/$defs/delete_session"},
+        {"$ref": "#/$defs/Command/$defs/get_program"},
+        {"$ref": "#/$defs/Command/$defs/get_program_list"},
+        {"$ref": "#/$defs/Command/$defs/hide_message"},
+        {"$ref": "#/$defs/Command/$defs/move_message_down"},
+        {"$ref": "#/$defs/Command/$defs/move_message_up"},
+        {"$ref": "#/$defs/Command/$defs/move_session_down"},
+        {"$ref": "#/$defs/Command/$defs/move_session_up"},
+        {"$ref": "#/$defs/Command/$defs/navigate_next_session"},
+        {"$ref": "#/$defs/Command/$defs/navigate_previous_session"},
+        {"$ref": "#/$defs/Command/$defs/pause_session"},
+        {"$ref": "#/$defs/Command/$defs/request_control_center_status"},
+        {"$ref": "#/$defs/Command/$defs/request_messages_status"},
+        {"$ref": "#/$defs/Command/$defs/request_sessions_status"},
+        {"$ref": "#/$defs/Command/$defs/request_settings_status"},
+        {"$ref": "#/$defs/Command/$defs/request_status"},
+        {"$ref": "#/$defs/Command/$defs/request_view_status"},
+        {"$ref": "#/$defs/Command/$defs/reset_current_session"},
+        {"$ref": "#/$defs/Command/$defs/reset_program_elapsed_timer"},
+        {"$ref": "#/$defs/Command/$defs/send_program"},
+        {"$ref": "#/$defs/Command/$defs/set_blackout"},
+        {"$ref": "#/$defs/Command/$defs/set_brightness"},
+        {"$ref": "#/$defs/Command/$defs/set_flash"},
+        {"$ref": "#/$defs/Command/$defs/set_glow"},
+        {"$ref": "#/$defs/Command/$defs/set_is_time_up_display"},
+        {"$ref": "#/$defs/Command/$defs/show_idle"},
+        {"$ref": "#/$defs/Command/$defs/show_message"},
+        {"$ref": "#/$defs/Command/$defs/show_session"},
+        {"$ref": "#/$defs/Command/$defs/start_session"},
+        {"$ref": "#/$defs/Command/$defs/subtract_time"},
+        {"$ref": "#/$defs/Command/$defs/toggle_flash"},
+        {"$ref": "#/$defs/Command/$defs/toggle_glow"},
+        {"$ref": "#/$defs/Command/$defs/toggle_is_time_up_display"},
+        {"$ref": "#/$defs/Command/$defs/update_message"},
+        {"$ref": "#/$defs/Command/$defs/update_session"}
+      ],
+      "$defs": {
+        "request_status": {
+          "type": "object",
+          "properties": {
+            "detailed": {"type": "boolean"},
+            "type": {"const": "request_status"},
+            "request_id": {"type": [
+              "string",
+              "null"
+            ]}
+          },
+          "required": ["type"]
+        },
+        "set_flash": {
+          "type": "object",
+          "properties": {
+            "action": {"type": "string"},
+            "type": {"const": "set_flash"},
+            "request_id": {"type": [
+              "string",
+              "null"
+            ]}
+          },
+          "required": [
+            "type",
+            "action"
+          ]
+        },
+        "delete_all_messages": {
+          "type": "object",
+          "properties": {
+            "type": {"const": "delete_all_messages"},
+            "request_id": {"type": [
+              "string",
+              "null"
+            ]}
+          },
+          "required": ["type"]
+        },
+        "get_program_list": {
+          "type": "object",
+          "properties": {
+            "type": {"const": "get_program_list"},
+            "request_id": {"type": [
+              "string",
+              "null"
+            ]}
+          },
+          "required": ["type"]
+        },
+        "reset_program_elapsed_timer": {
+          "type": "object",
+          "properties": {
+            "type": {"const": "reset_program_elapsed_timer"},
+            "request_id": {"type": [
+              "string",
+              "null"
+            ]}
+          },
+          "required": ["type"]
+        },
+        "update_session": {
+          "type": "object",
+          "properties": {
+            "mode": {"type": [
+              "string",
+              "null"
+            ]},
+            "seconds": {"type": [
+              "integer",
+              "null"
+            ]},
+            "notes": {"type": [
+              "string",
+              "null"
+            ]},
+            "offset": {"type": [
+              "integer",
+              "null"
+            ]},
+            "flash_start_time_seconds": {"type": [
+              "integer",
+              "null"
+            ]},
+            "flash_length_seconds": {"type": [
+              "integer",
+              "null"
+            ]},
+            "name": {"type": [
+              "string",
+              "null"
+            ]},
+            "session_id": {"type": "string"},
+            "presenter_name": {"type": [
+              "string",
+              "null"
+            ]},
+            "type": {"const": "update_session"},
+            "request_id": {"type": [
+              "string",
+              "null"
+            ]}
+          },
+          "required": [
+            "type",
+            "session_id"
+          ]
+        },
+        "navigate_previous_session": {
+          "type": "object",
+          "properties": {
+            "type": {"const": "navigate_previous_session"},
+            "request_id": {"type": [
+              "string",
+              "null"
+            ]}
+          },
+          "required": ["type"]
+        },
+        "delete_all_sessions": {
+          "type": "object",
+          "properties": {
+            "type": {"const": "delete_all_sessions"},
+            "request_id": {"type": [
+              "string",
+              "null"
+            ]}
+          },
+          "required": ["type"]
+        },
+        "get_program": {
+          "type": "object",
+          "properties": {
+            "type": {"const": "get_program"},
+            "request_id": {"type": [
+              "string",
+              "null"
+            ]}
+          },
+          "required": ["type"]
+        },
+        "pause_session": {
+          "type": "object",
+          "properties": {
+            "type": {"const": "pause_session"},
+            "request_id": {"type": [
+              "string",
+              "null"
+            ]}
+          },
+          "required": ["type"]
+        },
+        "toggle_is_time_up_display": {
+          "type": "object",
+          "properties": {
+            "type": {"const": "toggle_is_time_up_display"},
+            "request_id": {"type": [
+              "string",
+              "null"
+            ]}
+          },
+          "required": ["type"]
+        },
+        "add_session": {
+          "type": "object",
+          "properties": {
+            "mode": {"type": "string"},
+            "seconds": {"type": [
+              "integer",
+              "null"
+            ]},
+            "notes": {"type": [
+              "string",
+              "null"
+            ]},
+            "offset": {"type": [
+              "integer",
+              "null"
+            ]},
+            "flash_start_time_seconds": {"type": [
+              "integer",
+              "null"
+            ]},
+            "flash_length_seconds": {"type": [
+              "integer",
+              "null"
+            ]},
+            "name": {"type": [
+              "string",
+              "null"
+            ]},
+            "session_id": {"type": [
+              "string",
+              "null"
+            ]},
+            "presenter_name": {"type": [
+              "string",
+              "null"
+            ]},
+            "type": {"const": "add_session"},
+            "request_id": {"type": [
+              "string",
+              "null"
+            ]}
+          },
+          "required": ["type"]
+        },
+        "request_messages_status": {
+          "type": "object",
+          "properties": {
+            "type": {"const": "request_messages_status"},
+            "request_id": {"type": [
+              "string",
+              "null"
+            ]}
+          },
+          "required": ["type"]
+        },
+        "subtract_time": {
+          "anyOf": [
+            {"required": ["ms"]},
+            {"required": ["seconds"]}
+          ],
+          "type": "object",
+          "properties": {
+            "seconds": {"type": [
+              "integer",
+              "null"
+            ]},
+            "ms": {"type": [
+              "integer",
+              "null"
+            ]},
+            "type": {"const": "subtract_time"},
+            "request_id": {"type": [
+              "string",
+              "null"
+            ]}
+          },
+          "required": ["type"]
+        },
+        "JsonProgram": {
+          "type": "object",
+          "properties": {
+            "settings": {"$ref": "#/$defs/Command/$defs/JsonProgramSettings"},
+            "sessions": {
+              "type": "array",
+              "items": {"$ref": "#/$defs/Command/$defs/JsonSession"}
+            },
+            "user_id": {"type": [
+              "string",
+              "null"
+            ]},
+            "program_id": {"type": "string"},
+            "program_name": {"type": "string"},
+            "messages": {
+              "type": "array",
+              "items": {"$ref": "#/$defs/Command/$defs/JsonMessage"}
+            },
+            "version": {"type": "string"}
+          },
+          "required": [
+            "program_id",
+            "program_name",
+            "sessions",
+            "settings",
+            "version"
+          ]
+        },
+        "set_glow": {
+          "type": "object",
+          "properties": {
+            "type": {"const": "set_glow"},
+            "request_id": {"type": [
+              "string",
+              "null"
+            ]},
+            "enabled": {"type": "boolean"}
+          },
+          "required": [
+            "type",
+            "enabled"
+          ]
+        },
+        "delete_program": {
+          "type": "object",
+          "properties": {
+            "program_id": {"type": "string"},
+            "type": {"const": "delete_program"},
+            "request_id": {"type": [
+              "string",
+              "null"
+            ]}
+          },
+          "required": [
+            "type",
+            "program_id"
+          ]
+        },
+        "request_view_status": {
+          "type": "object",
+          "properties": {
+            "type": {"const": "request_view_status"},
+            "request_id": {"type": [
+              "string",
+              "null"
+            ]}
+          },
+          "required": ["type"]
+        },
+        "toggle_glow": {
+          "type": "object",
+          "properties": {
+            "type": {"const": "toggle_glow"},
+            "request_id": {"type": [
+              "string",
+              "null"
+            ]}
+          },
+          "required": ["type"]
+        },
+        "set_brightness": {
+          "type": "object",
+          "properties": {
+            "brightness": {"type": "integer"},
+            "type": {"const": "set_brightness"},
+            "request_id": {"type": [
+              "string",
+              "null"
+            ]}
+          },
+          "required": [
+            "type",
+            "brightness"
+          ]
+        },
+        "show_message": {
+          "anyOf": [
+            {"required": ["text"]},
+            {"required": ["message_id"]}
+          ],
+          "type": "object",
+          "properties": {
+            "message_id": {"type": [
+              "string",
+              "null"
+            ]},
+            "text": {"type": [
+              "string",
+              "null"
+            ]},
+            "type": {"const": "show_message"},
+            "request_id": {"type": [
+              "string",
+              "null"
+            ]},
+            "flash": {"type": "boolean"}
+          },
+          "required": ["type"]
+        },
+        "show_idle": {
+          "type": "object",
+          "properties": {
+            "type": {"const": "show_idle"},
+            "request_id": {"type": [
+              "string",
+              "null"
+            ]}
+          },
+          "required": ["type"]
+        },
+        "set_blackout": {
+          "type": "object",
+          "properties": {
+            "action": {"type": "string"},
+            "type": {"const": "set_blackout"},
+            "request_id": {"type": [
+              "string",
+              "null"
+            ]}
+          },
+          "required": [
+            "type",
+            "action"
+          ]
+        },
+        "reset_current_session": {
+          "type": "object",
+          "properties": {
+            "type": {"const": "reset_current_session"},
+            "request_id": {"type": [
+              "string",
+              "null"
+            ]}
+          },
+          "required": ["type"]
+        },
+        "start_session": {
+          "type": "object",
+          "properties": {
+            "session_id": {"type": [
+              "string",
+              "null"
+            ]},
+            "type": {"const": "start_session"},
+            "request_id": {"type": [
+              "string",
+              "null"
+            ]}
+          },
+          "required": ["type"]
+        },
+        "set_is_time_up_display": {
+          "type": "object",
+          "properties": {
+            "type": {"const": "set_is_time_up_display"},
+            "request_id": {"type": [
+              "string",
+              "null"
+            ]},
+            "enabled": {"type": "boolean"}
+          },
+          "required": [
+            "type",
+            "enabled"
+          ]
+        },
+        "add_message": {
+          "type": "object",
+          "properties": {
+            "type": {"const": "add_message"},
+            "request_id": {"type": [
+              "string",
+              "null"
+            ]},
+            "content": {"type": "string"}
+          },
+          "required": [
+            "type",
+            "content"
+          ]
+        },
+        "delete_session": {
+          "type": "object",
+          "properties": {
+            "session_id": {"type": "string"},
+            "type": {"const": "delete_session"},
+            "request_id": {"type": [
+              "string",
+              "null"
+            ]}
+          },
+          "required": [
+            "type",
+            "session_id"
+          ]
+        },
+        "move_message_up": {
+          "type": "object",
+          "properties": {
+            "message_id": {"type": "string"},
+            "type": {"const": "move_message_up"},
+            "request_id": {"type": [
+              "string",
+              "null"
+            ]}
+          },
+          "required": [
+            "type",
+            "message_id"
+          ]
+        },
+        "hide_message": {
+          "type": "object",
+          "properties": {
+            "type": {"const": "hide_message"},
+            "request_id": {"type": [
+              "string",
+              "null"
+            ]}
+          },
+          "required": ["type"]
+        },
+        "show_session": {
+          "type": "object",
+          "properties": {
+            "session_id": {"type": "string"},
+            "type": {"const": "show_session"},
+            "request_id": {"type": [
+              "string",
+              "null"
+            ]}
+          },
+          "required": [
+            "type",
+            "session_id"
+          ]
+        },
+        "navigate_next_session": {
+          "type": "object",
+          "properties": {
+            "type": {"const": "navigate_next_session"},
+            "request_id": {"type": [
+              "string",
+              "null"
+            ]}
+          },
+          "required": ["type"]
+        },
+        "move_session_up": {
+          "type": "object",
+          "properties": {
+            "session_id": {"type": "string"},
+            "type": {"const": "move_session_up"},
+            "request_id": {"type": [
+              "string",
+              "null"
+            ]}
+          },
+          "required": [
+            "type",
+            "session_id"
+          ]
+        },
+        "move_message_down": {
+          "type": "object",
+          "properties": {
+            "message_id": {"type": "string"},
+            "type": {"const": "move_message_down"},
+            "request_id": {"type": [
+              "string",
+              "null"
+            ]}
+          },
+          "required": [
+            "type",
+            "message_id"
+          ]
+        },
+        "update_message": {
+          "type": "object",
+          "properties": {
+            "message_id": {"type": "string"},
+            "type": {"const": "update_message"},
+            "request_id": {"type": [
+              "string",
+              "null"
+            ]},
+            "content": {"type": "string"}
+          },
+          "required": [
+            "type",
+            "message_id",
+            "content"
+          ]
+        },
+        "delete_message": {
+          "type": "object",
+          "properties": {
+            "message_id": {"type": "string"},
+            "type": {"const": "delete_message"},
+            "request_id": {"type": [
+              "string",
+              "null"
+            ]}
+          },
+          "required": [
+            "type",
+            "message_id"
+          ]
+        },
+        "request_control_center_status": {
+          "type": "object",
+          "properties": {
+            "type": {"const": "request_control_center_status"},
+            "request_id": {"type": [
+              "string",
+              "null"
+            ]}
+          },
+          "required": ["type"]
+        },
+        "JsonMessage": {
+          "type": "object",
+          "properties": {
+            "is_flashing": {"type": "boolean"},
+            "is_showing": {"type": "boolean"},
+            "id": {"type": "string"},
+            "version": {"type": "string"},
+            "content": {"type": "string"}
+          },
+          "required": ["content"]
+        },
+        "JsonProgramSettings": {
+          "type": "object",
+          "properties": {
+            "flash_start_time_seconds": {"type": "integer"},
+            "flash_length_seconds": {"type": "integer"}
+          }
+        },
+        "request_settings_status": {
+          "type": "object",
+          "properties": {
+            "type": {"const": "request_settings_status"},
+            "request_id": {"type": [
+              "string",
+              "null"
+            ]}
+          },
+          "required": ["type"]
+        },
+        "toggle_flash": {
+          "type": "object",
+          "properties": {
+            "type": {"const": "toggle_flash"},
+            "request_id": {"type": [
+              "string",
+              "null"
+            ]}
+          },
+          "required": ["type"]
+        },
+        "add_time": {
+          "anyOf": [
+            {"required": ["ms"]},
+            {"required": ["seconds"]}
+          ],
+          "type": "object",
+          "properties": {
+            "seconds": {"type": [
+              "integer",
+              "null"
+            ]},
+            "ms": {"type": [
+              "integer",
+              "null"
+            ]},
+            "type": {"const": "add_time"},
+            "request_id": {"type": [
+              "string",
+              "null"
+            ]}
+          },
+          "required": ["type"]
+        },
+        "send_program": {
+          "type": "object",
+          "properties": {
+            "program": {"$ref": "#/$defs/Command/$defs/JsonProgram"},
+            "type": {"const": "send_program"},
+            "request_id": {"type": [
+              "string",
+              "null"
+            ]}
+          },
+          "required": [
+            "type",
+            "program"
+          ]
+        },
+        "move_session_down": {
+          "type": "object",
+          "properties": {
+            "session_id": {"type": "string"},
+            "type": {"const": "move_session_down"},
+            "request_id": {"type": [
+              "string",
+              "null"
+            ]}
+          },
+          "required": [
+            "type",
+            "session_id"
+          ]
+        },
+        "JsonSession": {
+          "type": "object",
+          "properties": {
+            "duration_seconds": {"type": [
+              "integer",
+              "null"
+            ]},
+            "mode": {"type": "string"},
+            "started_at_timestamp": {"type": [
+              "integer",
+              "null"
+            ]},
+            "notes": {"type": "string"},
+            "offset": {"type": [
+              "integer",
+              "null"
+            ]},
+            "flash_start_time_seconds": {"type": "integer"},
+            "flash_length_seconds": {"type": "integer"},
+            "name": {"type": "string"},
+            "id": {"type": "string"},
+            "presenter_name": {"type": [
+              "string",
+              "null"
+            ]},
+            "version": {"type": "string"}
+          },
+          "required": ["name"]
+        },
+        "request_sessions_status": {
+          "type": "object",
+          "properties": {
+            "type": {"const": "request_sessions_status"},
+            "request_id": {"type": [
+              "string",
+              "null"
+            ]}
+          },
+          "required": ["type"]
+        }
+      },
+      "description": "All com.tougtechnologies.cuetimedisplay.protocol.httpjson.JsonProtocolCommand variants"
+    },
+    "Event": {
+      "oneOf": [
+        {"$ref": "#/$defs/Event/$defs/control_center_status_event"},
+        {"$ref": "#/$defs/Event/$defs/hello_event"},
+        {"$ref": "#/$defs/Event/$defs/messages_status_event"},
+        {"$ref": "#/$defs/Event/$defs/program_changed_event"},
+        {"$ref": "#/$defs/Event/$defs/sessions_status_event"},
+        {"$ref": "#/$defs/Event/$defs/settings_status_event"},
+        {"$ref": "#/$defs/Event/$defs/view_status_event"}
+      ],
+      "$defs": {
+        "view_status_event": {
+          "type": "object",
+          "properties": {
+            "view": {"$ref": "#/$defs/Event/$defs/JsonViewStatus"},
+            "type": {"const": "view_status_event"}
+          },
+          "required": [
+            "type",
+            "view"
+          ]
+        },
+        "JsonMessagesStatus": {
+          "type": "object",
+          "properties": {
+            "message_list": {
+              "type": "array",
+              "items": {"$ref": "#/$defs/Event/$defs/JsonMessageSummary"}
+            },
+            "is_flashing": {"type": "boolean"}
+          },
+          "required": [
+            "is_flashing",
+            "message_list"
+          ]
+        },
+        "JsonMessageSummary": {
+          "type": "object",
+          "properties": {
+            "is_showing": {"type": "boolean"},
+            "id": {"type": "string"},
+            "text": {"type": "string"}
+          },
+          "required": [
+            "id",
+            "is_showing",
+            "text"
+          ]
+        },
+        "program_changed_event": {
+          "type": "object",
+          "properties": {
+            "has_program": {"type": "boolean"},
+            "program": {"$ref": "#/$defs/Event/$defs/JsonProgram"},
+            "type": {"const": "program_changed_event"}
+          },
+          "required": [
+            "type",
+            "has_program"
+          ]
+        },
+        "JsonSettingsStatus": {
+          "type": "object",
+          "properties": {
+            "brightness": {"type": "integer"},
+            "is_time_up_display": {"type": "boolean"},
+            "default_flash_length": {"type": "number"},
+            "default_flash_start_time": {"type": "number"},
+            "view_only_code": {"type": [
+              "string",
+              "null"
+            ]},
+            "screen_version": {"type": "string"}
+          },
+          "required": [
+            "brightness",
+            "default_flash_length",
+            "default_flash_start_time",
+            "is_time_up_display",
+            "screen_version"
+          ]
+        },
+        "JsonSessionsStatus": {
+          "type": "object",
+          "properties": {"session_list": {
+            "type": "array",
+            "items": {"$ref": "#/$defs/Event/$defs/JsonSessionSummary"}
+          }},
+          "required": ["session_list"]
+        },
+        "JsonSessionSummary": {
+          "type": "object",
+          "properties": {
+            "notes": {"type": "string"},
+            "offset": {"type": [
+              "integer",
+              "null"
+            ]},
+            "index": {"type": "integer"},
+            "presenter_name": {"type": [
+              "string",
+              "null"
+            ]},
+            "version": {"type": "string"},
+            "duration": {"type": [
+              "integer",
+              "null"
+            ]},
+            "mode": {"type": "string"},
+            "started_at_timestamp": {"type": [
+              "integer",
+              "null"
+            ]},
+            "flash_start_time_seconds": {"type": "integer"},
+            "flash_length_seconds": {"type": "integer"},
+            "name": {"type": "string"},
+            "id": {"type": "string"},
+            "is_current": {"type": "boolean"}
+          },
+          "required": [
+            "flash_length_seconds",
+            "flash_start_time_seconds",
+            "id",
+            "index",
+            "is_current",
+            "mode",
+            "name",
+            "notes",
+            "version"
+          ]
+        },
+        "JsonControlCenterStatus": {
+          "type": "object",
+          "properties": {
+            "flash_start_time": {"type": "number"},
+            "is_next_session": {"type": "boolean"},
+            "current_presenter_name": {"type": "string"},
+            "current_session_name": {"type": "string"},
+            "current_session_id": {"type": "string"},
+            "current_session_index": {"type": "integer"},
+            "is_blackout": {"type": "boolean"},
+            "program_time": {"type": "number"},
+            "is_glowing": {"type": "boolean"},
+            "timer_run_state": {"type": "string"},
+            "is_time_up_flashing": {"type": "boolean"},
+            "timer": {"type": "number"},
+            "is_previous_session": {"type": "boolean"},
+            "elapsed_time": {"type": "number"},
+            "flash_length": {"type": "number"},
+            "program_elapsed_time": {"type": "number"}
+          },
+          "required": [
+            "current_presenter_name",
+            "current_session_id",
+            "current_session_index",
+            "current_session_name",
+            "elapsed_time",
+            "flash_length",
+            "flash_start_time",
+            "is_blackout",
+            "is_glowing",
+            "is_next_session",
+            "is_previous_session",
+            "is_time_up_flashing",
+            "program_elapsed_time",
+            "program_time",
+            "timer",
+            "timer_run_state"
+          ]
+        },
+        "messages_status_event": {
+          "type": "object",
+          "properties": {
+            "messages": {"$ref": "#/$defs/Event/$defs/JsonMessagesStatus"},
+            "type": {"const": "messages_status_event"}
+          },
+          "required": [
+            "type",
+            "messages"
+          ]
+        },
+        "JsonViewStatus": {
+          "type": "object",
+          "properties": {
+            "is_time_up_flashing": {"type": "boolean"},
+            "session_name": {"type": "string"},
+            "message_text": {"type": "string"},
+            "is_flashing": {"type": "boolean"},
+            "elapsed_time": {"type": "number"},
+            "session_id": {"type": "string"},
+            "message_id": {"type": [
+              "string",
+              "null"
+            ]},
+            "presenter_name": {"type": "string"},
+            "progress_bar": {"type": "number"},
+            "is_glowing": {"type": "boolean"},
+            "program_elapsed_time": {"type": "number"}
+          },
+          "required": [
+            "elapsed_time",
+            "is_flashing",
+            "is_glowing",
+            "is_time_up_flashing",
+            "message_text",
+            "presenter_name",
+            "program_elapsed_time",
+            "progress_bar",
+            "session_id",
+            "session_name"
+          ]
+        },
+        "JsonProgram": {
+          "type": "object",
+          "properties": {
+            "settings": {"$ref": "#/$defs/Event/$defs/JsonProgramSettings"},
+            "sessions": {
+              "type": "array",
+              "items": {"$ref": "#/$defs/Event/$defs/JsonSession"}
+            },
+            "user_id": {"type": [
+              "string",
+              "null"
+            ]},
+            "program_id": {"type": "string"},
+            "program_name": {"type": "string"},
+            "messages": {
+              "type": "array",
+              "items": {"$ref": "#/$defs/Event/$defs/JsonMessage"}
+            },
+            "version": {"type": "string"}
+          },
+          "required": [
+            "program_id",
+            "program_name",
+            "sessions",
+            "settings",
+            "version"
+          ]
+        },
+        "JsonMessage": {
+          "type": "object",
+          "properties": {
+            "is_flashing": {"type": "boolean"},
+            "is_showing": {"type": "boolean"},
+            "id": {"type": "string"},
+            "version": {"type": "string"},
+            "content": {"type": "string"}
+          },
+          "required": ["content"]
+        },
+        "settings_status_event": {
+          "type": "object",
+          "properties": {
+            "settings": {"$ref": "#/$defs/Event/$defs/JsonSettingsStatus"},
+            "type": {"const": "settings_status_event"}
+          },
+          "required": [
+            "type",
+            "settings"
+          ]
+        },
+        "JsonProgramSettings": {
+          "type": "object",
+          "properties": {
+            "flash_start_time_seconds": {"type": "integer"},
+            "flash_length_seconds": {"type": "integer"}
+          }
+        },
+        "control_center_status_event": {
+          "type": "object",
+          "properties": {
+            "control_center": {"$ref": "#/$defs/Event/$defs/JsonControlCenterStatus"},
+            "type": {"const": "control_center_status_event"}
+          },
+          "required": [
+            "type",
+            "control_center"
+          ]
+        },
+        "hello_event": {
+          "type": "object",
+          "properties": {
+            "version_name": {"type": "string"},
+            "screen_name": {"type": "string"},
+            "version_code": {"type": "integer"},
+            "screen_id": {"type": "string"},
+            "type": {"const": "hello_event"}
+          },
+          "required": [
+            "type",
+            "screen_id",
+            "screen_name",
+            "version_name",
+            "version_code"
+          ]
+        },
+        "sessions_status_event": {
+          "type": "object",
+          "properties": {
+            "sessions": {"$ref": "#/$defs/Event/$defs/JsonSessionsStatus"},
+            "type": {"const": "sessions_status_event"}
+          },
+          "required": [
+            "type",
+            "sessions"
+          ]
+        },
+        "JsonSession": {
+          "type": "object",
+          "properties": {
+            "duration_seconds": {"type": [
+              "integer",
+              "null"
+            ]},
+            "mode": {"type": "string"},
+            "started_at_timestamp": {"type": [
+              "integer",
+              "null"
+            ]},
+            "notes": {"type": "string"},
+            "offset": {"type": [
+              "integer",
+              "null"
+            ]},
+            "flash_start_time_seconds": {"type": "integer"},
+            "flash_length_seconds": {"type": "integer"},
+            "name": {"type": "string"},
+            "id": {"type": "string"},
+            "presenter_name": {"type": [
+              "string",
+              "null"
+            ]},
+            "version": {"type": "string"}
+          },
+          "required": ["name"]
+        }
+      },
+      "description": "All com.tougtechnologies.cuetimedisplay.protocol.httpjson.JsonProtocolEvent variants"
+    }
+  },
+  "description": "JSON Schema for the CueTime JSON control protocol over HTTP (port 8080) and WebSocket (port 8081). All message types use a 'type' field as a discriminator.",
+  "title": "CueTime JSON Control Protocol"
+}
