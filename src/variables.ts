@@ -1,7 +1,13 @@
-import type { ModuleInstance } from './main.js'
+import type { ModuleInstance } from './main.ts'
+import type { CompanionVariableDefinitions } from '@companion-module/base'
 
+/**
+ * Variable definitions mirror `VariableValues` in `logic.ts` — keep the two in
+ * step, since only the definitions are visible to Companion's expression editor.
+ */
 export function UpdateVariableDefinitions(self: ModuleInstance): void {
-	self.setVariableDefinitions({
+	const definitions: CompanionVariableDefinitions = {
+		timer_run_state: { name: 'Timer Run State (idle/running/paused)' },
 		elapsed_time: { name: 'Elapsed Time (ms)' },
 		timer: { name: 'Timer (ms)' },
 		current_session_name: { name: 'Current Session Name' },
@@ -18,5 +24,7 @@ export function UpdateVariableDefinitions(self: ModuleInstance): void {
 		next_session_name: { name: 'Next Session Name' },
 		previous_session_presenter_name: { name: 'Previous Session Presenter Name' },
 		next_session_presenter_name: { name: 'Next Session Presenter Name' },
-	})
+	}
+
+	self.setVariableDefinitions(definitions)
 }

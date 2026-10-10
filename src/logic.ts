@@ -1,84 +1,28 @@
-import type { Config } from './main.js'
+import type { Config } from './main.ts'
+import type { ProtocolState } from './protocol/state.ts'
 
-// ---- Types shared between main and tests ----
+// ---- Host/port resolution ----
 
-export interface ControlCenterStatus {
-	elapsed_time: number
-	timer: number
-	current_session_name: string
-	current_presenter_name: string
-	is_playing: boolean
-	is_glowing: boolean
-	is_blackout: boolean
-	is_previous_session: boolean
-	is_next_session: boolean
-	flash_start_time: number
-	program_elapsed_time: number
-	program_time: number
-	current_session_id: string
-	current_session_index: number
+/** Prefers the Bonjour-discovered device, falling back to the manually entered host. */
+export function getEffectiveHost(config: Pick<Config, 'host' | 'cuetime-display'>): string {
+	if (config['cuetime-display']) {
+		return config['cuetime-display']
+	}
+	return config.host || ''
 }
 
-export interface ViewStatus {
-	message_text: string
-	presenter_name: string
-	elapsed_time: number
-	program_elapsed_time: number
-	session_name: string
-	progress_bar: number
-	session_id: string | null
-	message_id: string | null
-	is_flashing: boolean
-	is_glowing: boolean
-}
-
-export interface SettingsStatus {
-	brightness: number
-	default_flash_start_time: number
-	default_flash_length: number
-	view_only_code: string
-	is_time_up_display: boolean
-}
-
-export interface SessionInfo {
-	id: string
-	index: number
-	start_time: number | null
-	duration: number
-	session_name: string
-	presenter_name?: string
-	is_playing: boolean
-}
-
-export interface SessionsStatus {
-	session_list: SessionInfo[]
-}
-
-export interface ApiResponse {
-	success?: boolean
-	message?: string
-	code?: string
-	control_center?: ControlCenterStatus
-	view?: ViewStatus
-	settings?: SettingsStatus
-	sessions?: SessionsStatus
-}
-
-export interface VariableValues {
-	elapsed_time: number
-	timer: number
-	current_session_name: string
-	current_presenter_name: string
-	is_playing: string
-	is_glowing: string
-	is_blackout: string
-	message_text: string
-	current_session_number: number
-	total_sessions: number
+/** The WebSocket transport lives on port 8081 (HTTP is 8080 and unused here). */
+export function getEffectivePort(config: Pick<Config, 'port'>): string {
+	return config.port || '8081'
 }
 
 // ---- Time formatting ----
 
+/**
+ * Formats a millisecond duration for display: `MM:SS`, or `HH:MM:SS` once it
+ * passes an hour. Negative and zero inputs render as `00:00` because the
+ * protocol's `timer` field is the unsigned on-screen reading.
+ */
 export function formatTime(ms: number): string {
 	if (!ms || ms < 0) {
 		return '00:00'
@@ -96,78 +40,119 @@ export function formatTime(ms: number): string {
 	return `${pad(minutes)}:${pad(seconds)}`
 }
 
-// ---- Host/port resolution ----
+// ---- Variables ----
 
-export function getEffectiveHost(config: Pick<Config, 'host' | 'cuetime-display'>): string {
-	if (config['cuetime-display']) {
-		return config['cuetime-display']
-	}
-	return config.host || ''
+/**
+ * Declared as a type alias (not an interface) so it is assignable to
+ * `CompanionVariableValues`, which is an index-signature type.
+ */
+export type VariableValues = {
+	timer_run_state: string
+	elapsed_time: number
+	timer: number
+	current_session_name: string
+	current_presenter_name: string
+	is_playing: string
+	is_glowing: string
+	is_blackout: string
+	message_text: string
+	current_session_number: number
+	total_sessions: number
+	elapsed_formatted: string
+	remaining_formatted: string
+	previous_session_name: string
+	next_session_name: string
+	previous_session_presenter_name: string
+	next_session_presenter_name: string
 }
 
-export function getEffectivePort(config: Pick<Config, 'port'>): string {
-	return config.port || '8080'
+/**
+ * Projects the pushed protocol state onto the module's variables.
+ *
+ * Every value is derived from state the device has actually reported, so an
+ * absent field degrades to a neutral default rather than stale data.
+ */
+export function extractVariableValues(state: ProtocolState): VariableValues {
+	const cc = state.controlCenter
+	const view = state.view
+	const sessions = state.sessionList
+	const currentIndex = cc?.current_session_index ?? -1
+	const previous = currentIndex > 0 ? sessions[currentIndex - 1] : undefined
+	const next = currentIndex >= 0 ? sessions[currentIndex + 1] : undefined
+
+	return {
+		timer_run_state: cc?.timer_run_state ?? 'idle',
+		elapsed_time: cc?.elapsed_time ?? 0,
+		timer: cc?.timer ?? 0,
+		current_session_name: cc?.current_session_name ?? '',
+		current_presenter_name: cc?.current_presenter_name ?? '',
+		is_playing: cc?.timer_run_state === 'running' ? 'Yes' : 'No',
+		is_glowing: cc?.is_glowing ? 'Yes' : 'No',
+		is_blackout: cc?.is_blackout ? 'Yes' : 'No',
+		message_text: view?.message_text ?? '',
+		current_session_number: currentIndex >= 0 ? currentIndex + 1 : 0,
+		total_sessions: sessions.length,
+		elapsed_formatted: formatTime(view?.elapsed_time ?? cc?.elapsed_time ?? 0),
+		remaining_formatted: formatTime(cc?.timer ?? 0),
+		previous_session_name: previous?.name ?? '',
+		next_session_name: next?.name ?? '',
+		previous_session_presenter_name: previous?.presenter_name ?? '',
+		next_session_presenter_name: next?.presenter_name ?? '',
+	}
 }
 
 // ---- Boolean feedback logic ----
+//
+// `timer_run_state` (`idle` / `running` / `paused`) replaces the retired
+// `is_playing` field, which could not distinguish a paused timer from an idle one.
 
-export function checkIsPlaying(status: ApiResponse | null): boolean {
-	return !!status?.control_center?.is_playing
+export function checkIsPlaying(state: ProtocolState): boolean {
+	return state.controlCenter?.timer_run_state === 'running'
 }
 
-export function checkIsGlowing(status: ApiResponse | null): boolean {
-	return !!status?.control_center?.is_glowing
+export function checkIsPaused(state: ProtocolState): boolean {
+	return state.controlCenter?.timer_run_state === 'paused'
 }
 
-export function checkIsBlackout(status: ApiResponse | null): boolean {
-	return !!status?.control_center?.is_blackout
+export function checkIsIdle(state: ProtocolState): boolean {
+	return (state.controlCenter?.timer_run_state ?? 'idle') === 'idle'
 }
 
-export function checkIsFlashing(status: ApiResponse | null): boolean {
-	return !!status?.view?.is_flashing
+export function checkIsGlowing(state: ProtocolState): boolean {
+	return state.controlCenter?.is_glowing === true
 }
 
-export function checkHasPreviousSession(status: ApiResponse | null): boolean {
-	return !!status?.control_center?.is_previous_session
+export function checkIsBlackout(state: ProtocolState): boolean {
+	return state.controlCenter?.is_blackout === true
 }
 
-export function checkHasNextSession(status: ApiResponse | null): boolean {
-	return !!status?.control_center?.is_next_session
+export function checkIsFlashing(state: ProtocolState): boolean {
+	return state.view?.is_flashing === true
 }
 
-export function checkMessageShowing(status: ApiResponse | null): boolean {
-	const text = status?.view?.message_text
-	return !!text && text.length > 0
+/** Navigation availability comes from the device, not from list arithmetic. */
+export function checkHasPreviousSession(state: ProtocolState): boolean {
+	return state.controlCenter?.is_previous_session === true
 }
 
-export function checkIsTimeUpDisplay(status: ApiResponse | null): boolean {
-	return !!status?.settings?.is_time_up_display
+export function checkHasNextSession(state: ProtocolState): boolean {
+	return state.controlCenter?.is_next_session === true
 }
 
-// ---- Variable extraction ----
+export function checkMessageShowing(state: ProtocolState): boolean {
+	const text = state.view?.message_text
+	return !!text && text.trim().length > 0
+}
 
-export function extractVariableValues(status: ApiResponse): VariableValues | null {
-	if (!status.success || !status.control_center) {
-		return null
-	}
+export function checkIsTimeUpDisplay(state: ProtocolState): boolean {
+	return state.settings?.is_time_up_display === true
+}
 
-	const cc = status.control_center
-	const view = status.view
-	const sessions = status.sessions
-
-	const current_session_number = cc.current_session_index !== undefined ? cc.current_session_index + 1 : 0
-	const total_sessions = sessions?.session_list?.length || 0
-
-	return {
-		elapsed_time: cc.elapsed_time || 0,
-		timer: cc.timer || 0,
-		current_session_name: cc.current_session_name || '',
-		current_presenter_name: cc.current_presenter_name || '',
-		is_playing: cc.is_playing ? 'Yes' : 'No',
-		is_glowing: cc.is_glowing ? 'Yes' : 'No',
-		is_blackout: cc.is_blackout ? 'Yes' : 'No',
-		message_text: view?.message_text || '',
-		current_session_number,
-		total_sessions,
-	}
+/**
+ * The time-is-up flash is reported on the control center and (while it is on
+ * screen) the view. It is not a settings field — unlike the retired
+ * `settings.is_time_up_flashing`, which the vc146 schema does not define.
+ */
+export function checkIsTimeUpFlashing(state: ProtocolState): boolean {
+	return state.controlCenter?.is_time_up_flashing === true || state.view?.is_time_up_flashing === true
 }

@@ -2,30 +2,58 @@
 
 See [HELP.md](./companion/HELP.md) and [LICENSE](./LICENSE)
 
+## Protocol reference
+
+The module controls CueTime Stage Display devices over the JSON control protocol,
+**over WebSocket only** (`ws://<device>:8081`).
+[HTTP_JSON_CONTROL_PROTOCOL.md](./HTTP_JSON_CONTROL_PROTOCOL.md) documents the messages.
+
+The authoritative machine-readable schema is
+[`schemas/protocol-schema.json`](./schemas/protocol-schema.json), **vendored
+verbatim** from the sibling `Android-Display-App/` repo. Both the spec and the schema
+are generated far-side from the Kotlin `@Serializable` data classes; the vendored
+copies are committed so this repo builds standalone. See
+[docs/CONFORMANCE.md](./docs/CONFORMANCE.md) for the exact far-side commit, content
+hash, and regeneration instructions.
+
+`src/protocol/generated.ts` is generated from the vendored schema by
+`scripts/generate-protocol.mjs`. After updating the vendored schema, run:
+
+```sh
+yarn generate-protocol
+```
+
+Do not hand-edit `src/protocol/generated.ts`.
+
 ## Actions
 
 - `navigate_next_session` — Navigate to next session
 - `navigate_previous_session` — Navigate to previous session
-- `start_timer` — Start the timer
-- `resume_timer` — Resume from pause
-- `pause_timer` — Pause the timer
-- `toggle_playback` — Toggle between play and pause based on current device state
-- `setup_timer` — Configure a new timer (duration, mode, initial state, session_id, flash params)
+- `show_session` — Jump to a session by id
+- `toggle_playback` — Toggle between play and pause based on the device's reported run state
+- `start_session` — Start or resume the current session
+- `pause_session` — Pause the current session
+- `reset_current_session` — Return the current session to its configured start value, paused
+- `reset_program_elapsed_timer` — Reset the program elapsed counter
+- `add_session` — Append a session (mode, duration or time-of-day offset, presenter, notes, flash timing), optionally starting it
+- `move_session_up` / `move_session_down` — Reorder a session by id
+- `delete_all_sessions` / `delete_all_messages` — Remove every session or message (requires confirmation)
 - `add_time` — Add seconds to the timer
 - `subtract_time` — Subtract seconds from the timer
 - `blackout` — Enable, disable, or toggle blackout
-- `set_glow` — Enable or disable glow effect
-- `toggle_glow` — Toggle glow effect on/off
-- `set_flash` — Enable or disable flash effect
-- `toggle_flash` — Toggle flash effect on/off
-- `show_message` — Show a message on screen; tap again to hide it
-- `hide_display` — Hide the display
+- `set_glow` / `toggle_glow` — Control the glow effect
+- `set_flash` / `toggle_flash` — Control the message flash
+- `set_brightness` — Set the backlight (whole number, 0–100)
+- `set_is_time_up_display` / `toggle_is_time_up_display` — Control the time-is-up overlay
+- `show_message` — Show a message; pressing again while one is on screen hides it
+- `hide_message` — Take the message off screen without deleting it
 - `show_idle` — Show the idle screen
 
 ## Variables
 
-- `elapsed_time` — Session elapsed time (ms)
-- `timer` — Current timer value (ms)
+- `timer_run_state` — Timer engine state (`idle`, `running`, `paused`)
+- `elapsed_time` — Session running time (ms)
+- `timer` — Current on-screen reading (ms, unsigned)
 - `current_session_name` — Current session name
 - `current_presenter_name` — Current presenter name
 - `is_playing` — Whether timer is running ("Yes"/"No")
@@ -34,22 +62,24 @@ See [HELP.md](./companion/HELP.md) and [LICENSE](./LICENSE)
 - `message_text` — Current message text
 - `current_session_number` — Current session number (1-based)
 - `total_sessions` — Total number of sessions in the program
-- `elapsed_formatted` — Formatted elapsed time (MM:SS or H:MM:SS)
-- `remaining_formatted` — Formatted remaining time (MM:SS or H:MM:SS)
+- `elapsed_formatted` — Formatted elapsed time (MM:SS or HH:MM:SS)
+- `remaining_formatted` — Formatted remaining time (MM:SS or HH:MM:SS)
 - `previous_session_name` — Name of the previous session
 - `next_session_name` — Name of the next session
+- `previous_session_presenter_name` / `next_session_presenter_name` — Presenter of the previous / next session
 
 ## Feedbacks
 
-- `is_playing` — Timer is Running
+- `is_connected` — Device Is Connected
+- `is_playing` / `is_paused` / `is_idle` — Which `timer_run_state` the device reports
 - `is_glowing` — Glow Effect Active
 - `is_blackout` — Blackout Mode Active
 - `is_flashing` — Flash Effect Active
-- `has_previous_session` — Previous Session Exists
-- `has_next_session` — Next Session Exists
+- `has_previous_session` / `no_previous_session` — Whether navigating back is available
+- `has_next_session` / `no_next_session` — Whether navigating forward is available
 - `message_showing` — Message Is Showing
-- `is_connected` — Device Is Connected
 - `is_time_up_display` — Time-is-Up Display Enabled
+- `is_time_up_flashing` — Time-is-Up Flash Active
 
 ## Presets
 

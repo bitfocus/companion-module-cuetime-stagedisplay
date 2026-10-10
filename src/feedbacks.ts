@@ -1,9 +1,11 @@
 import { combineRgb } from '@companion-module/base'
-import { ModuleInstance } from './main.js'
-import { icon_eye, icon_bar_eye } from './generated-icons.js'
 import type { CompanionAdvancedFeedbackResult } from '@companion-module/base'
+import type { ModuleInstance } from './main.ts'
+import { icon_eye, icon_bar_eye } from './generated-icons.ts'
 import {
 	checkIsPlaying,
+	checkIsPaused,
+	checkIsIdle,
 	checkIsGlowing,
 	checkIsBlackout,
 	checkIsFlashing,
@@ -11,21 +13,50 @@ import {
 	checkHasNextSession,
 	checkMessageShowing,
 	checkIsTimeUpDisplay,
-} from './logic.js'
+	checkIsTimeUpFlashing,
+} from './logic.ts'
 
 export function UpdateFeedbacks(self: ModuleInstance): void {
 	self.setFeedbackDefinitions({
+		is_connected: {
+			name: 'Device Is Connected',
+			type: 'boolean',
+			defaultStyle: {
+				bgcolor: combineRgb(0, 200, 0),
+				color: combineRgb(0, 0, 0),
+			},
+			options: [],
+			callback: () => self.connected,
+		},
 		is_playing: {
-			name: 'Timer is Running',
+			name: 'Timer Is Running',
 			type: 'boolean',
 			defaultStyle: {
 				bgcolor: combineRgb(0, 255, 0),
 				color: combineRgb(0, 0, 0),
 			},
 			options: [],
-			callback: (_feedback: any) => {
-				return checkIsPlaying(self.latestStatus)
+			callback: () => checkIsPlaying(self.state),
+		},
+		is_paused: {
+			name: 'Timer Is Paused',
+			type: 'boolean',
+			defaultStyle: {
+				bgcolor: combineRgb(255, 165, 0),
+				color: combineRgb(0, 0, 0),
 			},
+			options: [],
+			callback: () => checkIsPaused(self.state),
+		},
+		is_idle: {
+			name: 'Timer Is Idle',
+			type: 'boolean',
+			defaultStyle: {
+				bgcolor: combineRgb(80, 80, 80),
+				color: combineRgb(255, 255, 255),
+			},
+			options: [],
+			callback: () => checkIsIdle(self.state),
 		},
 		is_glowing: {
 			name: 'Glow Effect Active',
@@ -35,16 +66,14 @@ export function UpdateFeedbacks(self: ModuleInstance): void {
 				color: combineRgb(0, 0, 0),
 			},
 			options: [],
-			callback: (_feedback: any) => {
-				return checkIsGlowing(self.latestStatus)
-			},
+			callback: () => checkIsGlowing(self.state),
 		},
 		is_blackout: {
 			name: 'Blackout Mode Active',
 			type: 'advanced',
 			options: [],
-			callback: (_feedback: any): CompanionAdvancedFeedbackResult => {
-				if (checkIsBlackout(self.latestStatus)) {
+			callback: (): CompanionAdvancedFeedbackResult => {
+				if (checkIsBlackout(self.state)) {
 					return {
 						bgcolor: combineRgb(255, 0, 0),
 						color: combineRgb(255, 255, 255),
@@ -66,9 +95,7 @@ export function UpdateFeedbacks(self: ModuleInstance): void {
 				color: combineRgb(0, 0, 0),
 			},
 			options: [],
-			callback: (_feedback: any) => {
-				return checkIsFlashing(self.latestStatus)
-			},
+			callback: () => checkIsFlashing(self.state),
 		},
 		has_previous_session: {
 			name: 'Previous Session Exists',
@@ -78,9 +105,7 @@ export function UpdateFeedbacks(self: ModuleInstance): void {
 				color: combineRgb(255, 255, 255),
 			},
 			options: [],
-			callback: (_feedback: any) => {
-				return checkHasPreviousSession(self.latestStatus)
-			},
+			callback: () => checkHasPreviousSession(self.state),
 		},
 		no_previous_session: {
 			name: 'No Previous Session',
@@ -90,9 +115,7 @@ export function UpdateFeedbacks(self: ModuleInstance): void {
 				color: combineRgb(0, 0, 0),
 			},
 			options: [],
-			callback: (_feedback: any) => {
-				return !checkHasPreviousSession(self.latestStatus)
-			},
+			callback: () => !checkHasPreviousSession(self.state),
 		},
 		has_next_session: {
 			name: 'Next Session Exists',
@@ -102,9 +125,7 @@ export function UpdateFeedbacks(self: ModuleInstance): void {
 				color: combineRgb(255, 255, 255),
 			},
 			options: [],
-			callback: (_feedback: any) => {
-				return checkHasNextSession(self.latestStatus)
-			},
+			callback: () => checkHasNextSession(self.state),
 		},
 		no_next_session: {
 			name: 'No Next Session',
@@ -114,9 +135,7 @@ export function UpdateFeedbacks(self: ModuleInstance): void {
 				color: combineRgb(0, 0, 0),
 			},
 			options: [],
-			callback: (_feedback: any) => {
-				return !checkHasNextSession(self.latestStatus)
-			},
+			callback: () => !checkHasNextSession(self.state),
 		},
 		message_showing: {
 			name: 'Message Is Showing',
@@ -126,21 +145,7 @@ export function UpdateFeedbacks(self: ModuleInstance): void {
 				color: combineRgb(255, 255, 255),
 			},
 			options: [],
-			callback: (_feedback: any) => {
-				return checkMessageShowing(self.latestStatus)
-			},
-		},
-		is_connected: {
-			name: 'Device Is Connected',
-			type: 'boolean',
-			defaultStyle: {
-				bgcolor: combineRgb(0, 200, 0),
-				color: combineRgb(0, 0, 0),
-			},
-			options: [],
-			callback: (_feedback: any) => {
-				return self.connected
-			},
+			callback: () => checkMessageShowing(self.state),
 		},
 		is_time_up_display: {
 			name: 'Time-is-Up Display Enabled',
@@ -150,9 +155,17 @@ export function UpdateFeedbacks(self: ModuleInstance): void {
 				color: combineRgb(255, 255, 255),
 			},
 			options: [],
-			callback: (_feedback: any) => {
-				return checkIsTimeUpDisplay(self.latestStatus)
+			callback: () => checkIsTimeUpDisplay(self.state),
+		},
+		is_time_up_flashing: {
+			name: 'Time-is-Up Flash Active',
+			type: 'boolean',
+			defaultStyle: {
+				bgcolor: combineRgb(255, 0, 0),
+				color: combineRgb(255, 255, 255),
 			},
+			options: [],
+			callback: () => checkIsTimeUpFlashing(self.state),
 		},
 	})
 }

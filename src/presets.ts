@@ -1,4 +1,4 @@
-import type { ModuleInstance } from './main.js'
+import type { ModuleInstance } from './main.ts'
 import type { CompanionPresetDefinitions, CompanionPresetSection } from '@companion-module/base'
 import {
 	icon_next,
@@ -13,7 +13,7 @@ import {
 	icon_glow,
 	icon_eye,
 	icon_bar_eye,
-} from './generated-icons.js'
+} from './generated-icons.ts'
 
 export function UpdatePresets(self: ModuleInstance): void {
 	const presets: CompanionPresetDefinitions = {
@@ -93,7 +93,7 @@ export function UpdatePresets(self: ModuleInstance): void {
 			},
 			steps: [
 				{
-					down: [{ actionId: 'pause_timer', options: {} }],
+					down: [{ actionId: 'pause_session', options: {} }],
 					up: [],
 				},
 			],
@@ -533,5 +533,5 @@ export function UpdatePresets(self: ModuleInstance): void {
 		],
 	}))
 
-	self.setPresetDefinitions(structure, presets as any)
+	self.setPresetDefinitions(structure, presets)
 }
