@@ -4,7 +4,7 @@
 	"id": "cuetime-stagedisplay",
 	"name": "CueTime Stage Display",
 	"shortname": "cuetime",
-	"description": "Module to control CueTime timer displays via http",
+	"description": "Module to control CueTime Stage Displays over WebSocket",
 	"version": "0.0.1",
 	"license": "MIT",
 	"repository": "git+https://github.com/bitfocus/companion-module-cuetime-stagedisplay.git",

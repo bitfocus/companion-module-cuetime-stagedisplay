@@ -156,7 +156,7 @@ export function UpdatePresets(self: ModuleInstance): void {
 			},
 			steps: [
 				{
-					down: [{ actionId: 'show_message', options: { text: 'Fill in message', flash: 'disable' } }],
+					down: [{ actionId: 'show_message', options: { message_number: 0, text: 'Fill in message', flash: 'keep' } }],
 					up: [],
 				},
 			],

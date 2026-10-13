@@ -42,21 +42,27 @@ If mDNS is unavailable, enter the device's IP address and port (default: 8081).
 
 - **Toggle Playback** — Pauses a running timer, starts a paused or idle one. Uses the device's reported `timer_run_state`, so a paused timer resumes rather than being treated as idle.
 - **Start / Resume Session** — Start or resume the current session's timer.
-- **Pause Session** — Pause the current session's timer. Rejected by the device for a time-of-day session, which cannot be paused.
+- **Pause Session** — Pause the current session's timer.
 - **Reset Current Session** — Return the current session to its configured start value and leave it paused.
 - **Reset Program Elapsed Timer** — Reset the program's elapsed counter.
 
-### Program editing
+A **Time of Day** session is a wall clock: it always runs, has no length, and cannot be
+paused or reset. These actions therefore do nothing when the current session is a Time
+of Day one — the device would refuse them anyway, and skipping locally means the log
+says why instead of a button appearing to be broken.
+
+### Sessions
 
 - **Add Session** — Append a session to the program, with mode, duration or time-of-day offset, presenter, notes and flash timing, and optionally start it immediately. Refuses to send a countdown shorter than 1 second, which the device rejects.
-- **Move Session Up** / **Move Session Down** — Reorder a session by id.
+- **Move Session Up** / **Move Session Down** — Reorder a session. Leave the session id blank to move the **current** session, which is usually what an operator wants mid-show. Does nothing when the session is already first (up) or last (down), rather than provoking a device error.
 - **Delete All Sessions** — Remove every session. Requires the confirm checkbox to be ticked.
-- **Delete All Messages** — Remove every message. Requires the confirm checkbox to be ticked.
 
 ### Time adjustment
 
-- **Add Time** — Add seconds to the current timer.
+- **Add Time** — Add seconds to the current timer. Fractional seconds are accepted; they are converted to whole milliseconds, which is the field vc146 wants.
 - **Subtract Time** — Subtract seconds from the current timer.
+
+Both do nothing on a Time of Day session, for the same reason as Pause Session above.
 
 ### Effects and display
 
@@ -69,7 +75,21 @@ If mDNS is unavailable, enter the device's IP address and port (default: 8081).
 
 ### Messages
 
-- **Show Message** — Display a message with optional flashing. Pressing the button again while a message is on screen hides it, so one button toggles.
+Messages are addressed by **position in the program's message list** (1 = first). The
+protocol's message summaries carry no position field — the list order _is_ the
+position — so a position is the only address an operator can reason about without
+copying opaque ids out of the device. The `total_messages` variable tells you how
+many there are.
+
+`show_message` accepts **either** a stored message number **or** literal text. A
+stored message is shown with its own configured flash settings, which is why
+addressing it by number is preferable when the message already exists in the program.
+
+- **Add Message** — Append a message to the program's message list. Adding does not display it; use **Show Message** for that.
+- **Delete Message** — Delete the message at a given position. The device refuses this while that message is on screen ("device busy"), so hide it first.
+- **Move Message Up** / **Move Message Down** — Reorder the message at a given position. Does nothing when it is already first (up) or last (down).
+- **Delete All Messages** — Remove every message. Requires the confirm checkbox to be ticked.
+- **Show Message** — Display a message, addressed either by a stored message number or by arbitrary text. Set the stored message number to 0 to use the text field. Pressing the button again takes that specific message down, so one button toggles — and a second button for a different message still works while the first is on screen.
 - **Hide Message** — Take the message off screen without removing it from the program.
 
 ## Variables
@@ -79,12 +99,15 @@ If mDNS is unavailable, enter the device's IP address and port (default: 8081).
 - **timer** — Current on-screen reading in milliseconds (unsigned)
 - **current_session_name** — Name of the current session
 - **current_presenter_name** — Name of the current presenter
+- **current_session_id** — Id of the current session (empty when idle)
+- **current_session_mode** — Mode of the current session (`countdown`, `countup`, `time_of_day`, or empty when idle)
 - **is_playing** — Whether the timer is running ("Yes"/"No")
 - **is_glowing** — Whether glow effect is active ("Yes"/"No")
 - **is_blackout** — Whether blackout mode is active ("Yes"/"No")
 - **message_text** — Currently displayed message text
 - **current_session_number** — Current session number (1-based, e.g., 2 for the second session)
 - **total_sessions** — Total number of sessions in the program
+- **total_messages** — Total number of messages in the program
 - **elapsed_formatted** — Formatted elapsed time (MM:SS or HH:MM:SS)
 - **remaining_formatted** — Formatted remaining time (MM:SS or HH:MM:SS)
 - **previous_session_name** — Name of the session before the current one

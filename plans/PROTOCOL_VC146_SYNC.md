@@ -31,7 +31,7 @@ unbuilt and one test-parity item is outstanding; §6.7 lists them.
 | WebSocket transport + reconnect                        | done (fixed-delay retry; backoff still open)      |
 | Silence watchdog                                       | **not built**, but no longer blocked — §11        |
 | Event-driven state, variables, feedbacks               | done                                              |
-| Actions mapped to vc146 commands                       | done (26 actions / 25 distinct commands)          |
+| Actions mapped to vc146 commands                       | done (30 actions / 29 distinct commands)          |
 | Config, presets, README, HELP                          | done                                              |
 | Far-side `test_ws_json_protocol.py` parity fixtures    | **not ported** — §6.7                             |
 | Manual pass against a vc146 device                     | **done** for the read path, actions, errors — §11 |
@@ -237,10 +237,10 @@ feedback derives from `live`, not from `updateStatus`.
 ### 5.4 Cost and behaviour inside Companion
 
 - Measured on firmware 1.1.2.24 (§11): while a timer runs the device pushes
-  `control_center_status_event` and `view_status_event` **~1 Hz each — ~2 events/s
-  total** — and goes silent when idle. The doc's "~1 Hz steady state" is per event
-  type. Each event re-projects ~17 variables and re-checks 14 feedbacks, so ~28
-  feedback evaluations per second; negligible.
+  `control_center_status_event` and `view_status_event` at ~1 Hz each — ~2 frames/s
+  total, and it goes silent when idle. That matches the document, which specifies the
+  rate per event type. Each event re-projects ~19 variables and re-checks 14
+  feedbacks, so ~28 feedback evaluations per second; negligible.
 - Event-driven state removes the 2 s HTTP polling loop and all HTTP round-trips for
   reads.
 - Multiple Companion instances (and the mobile app) each hold their own WS
@@ -355,10 +355,18 @@ Cross-checked mechanically: all 10 `actionId`s, 8 `feedbackId`s and 8
    The module currently sends them anyway and only logs at `warn`, so an operator's
    button silently does nothing. Guarding locally needs `current_session_mode`
    exposed (see §8).
-6. **Optional, unexposed but implemented-in-schema actions:** `add_message`,
-   `update_message`, `delete_message`, `move_message_up`/`_down`, `delete_session`,
-   `update_session`, `send_program`, `get_program`, `get_program_list`, and the five
-   unused `request_*` commands. `request_status` is used internally for hydration.
+6. **Optional, unexposed but implemented-in-schema actions:** `delete_session`,
+   `update_session`, `update_message`, `send_program`, `get_program`,
+   `get_program_list`, `delete_program`, and the five unused `request_*` commands.
+   `request_status` is used internally for hydration. `send_program` is
+   deliberately excluded: replacing a whole program from a button box is a footgun.
+
+   Message and session **adding, deleting and reordering are now implemented** (see
+   §7). Two adjacent gaps remain, both judgement calls:
+   - `update_message` is not exposed, so fixing a typo means delete + re-add.
+   - `show_message` addressed by text only, so a _stored_ message could not be shown
+     by reference — which is what honours its configured flash timing. **Fixed:** see
+     the correction note below.
 
 ---
 
@@ -369,29 +377,48 @@ option UI stays in seconds and the callback converts (`toWholeMs`). The doc is
 explicit: send `ms`; `seconds` is ignored whenever `ms` is nonzero and is only kept
 for clients that have not migrated.
 
-| Old action id                          | New action id                                                                                  | vc146 command(s)                         | Notes                                                     |
-| -------------------------------------- | ---------------------------------------------------------------------------------------------- | ---------------------------------------- | --------------------------------------------------------- |
-| `start_timer`                          | `start_session`                                                                                | `start_session`                          | no `session_id` = act on the current session              |
-| `resume_timer`                         | `start_session`                                                                                | `start_session`                          | merged into one action                                    |
-| `pause_timer`                          | `pause_session`                                                                                | `pause_session`                          | device rejects for ToD / idle                             |
-| `toggle_playback`                      | `toggle_playback` (id kept)                                                                    | `pause_session` / `start_session`        | driven off `timer_run_state`                              |
-| `navigate_next_session`                | unchanged                                                                                      | `navigate_next_session`                  | guarded on `is_next_session`; no wrap-around              |
-| `navigate_previous_session`            | unchanged                                                                                      | `navigate_previous_session`              | guarded on `is_previous_session`                          |
-| `add_time`                             | unchanged                                                                                      | `add_time { ms }`                        | UI seconds → `ms`                                         |
-| `subtract_time`                        | unchanged                                                                                      | `subtract_time { ms }`                   | same                                                      |
-| `blackout`                             | `blackout` (id kept)                                                                           | `set_blackout { action }`                | no toggle command; `toggle` resolved from `is_blackout`   |
-| `enable_blackout` / `disable_blackout` | dropped (covered by `blackout`)                                                                | —                                        |                                                           |
-| `set_glow`                             | unchanged                                                                                      | `set_glow { enabled }`                   | enabling glow disables blackout on the device             |
-| `toggle_glow`                          | unchanged                                                                                      | `toggle_glow`                            | ack carries no state                                      |
-| `set_flash`                            | unchanged                                                                                      | `set_flash { action }`                   | **was `{ enabled }`**                                     |
-| `toggle_flash`                         | unchanged                                                                                      | `toggle_flash`                           | ack carries no state                                      |
-| `show_message`                         | `show_message`                                                                                 | `show_message` / `hide_message`          | toggles from `view.message_text` (D4); `flash` boolean    |
-| `hide_display`                         | `hide_message`                                                                                 | `hide_message`                           | renamed                                                   |
-| `show_idle`                            | unchanged                                                                                      | `show_idle`                              | clears the current session, resets `program_elapsed_time` |
-| `setup_timer`                          | `add_session`                                                                                  | `add_session` → optional `start_session` | id read from `ack_response.entity_id` (D3)                |
-| —                                      | `show_session`, `move_session_up`, `move_session_down`, `delete_all_sessions`                  | same names                               | new                                                       |
-| —                                      | `reset_current_session`, `reset_program_elapsed_timer`                                         | same names                               | new                                                       |
-| —                                      | `set_brightness`, `set_is_time_up_display`, `toggle_is_time_up_display`, `delete_all_messages` | same names                               | new                                                       |
+| Old action id                          | New action id                                                                                  | vc146 command(s)                         | Notes                                                                                                   |
+| -------------------------------------- | ---------------------------------------------------------------------------------------------- | ---------------------------------------- | ------------------------------------------------------------------------------------------------------- |
+| `start_timer`                          | `start_session`                                                                                | `start_session`                          | no `session_id` = act on the current session                                                            |
+| `resume_timer`                         | `start_session`                                                                                | `start_session`                          | merged into one action                                                                                  |
+| `pause_timer`                          | `pause_session`                                                                                | `pause_session`                          | device rejects for ToD / idle                                                                           |
+| `toggle_playback`                      | `toggle_playback` (id kept)                                                                    | `pause_session` / `start_session`        | driven off `timer_run_state`                                                                            |
+| `navigate_next_session`                | unchanged                                                                                      | `navigate_next_session`                  | guarded on `is_next_session`; no wrap-around                                                            |
+| `navigate_previous_session`            | unchanged                                                                                      | `navigate_previous_session`              | guarded on `is_previous_session`                                                                        |
+| `add_time`                             | unchanged                                                                                      | `add_time { ms }`                        | UI seconds → `ms`                                                                                       |
+| `subtract_time`                        | unchanged                                                                                      | `subtract_time { ms }`                   | same                                                                                                    |
+| `blackout`                             | `blackout` (id kept)                                                                           | `set_blackout { action }`                | no toggle command; `toggle` resolved from `is_blackout`                                                 |
+| `enable_blackout` / `disable_blackout` | dropped (covered by `blackout`)                                                                | —                                        |                                                                                                         |
+| `set_glow`                             | unchanged                                                                                      | `set_glow { enabled }`                   | enabling glow disables blackout on the device                                                           |
+| `toggle_glow`                          | unchanged                                                                                      | `toggle_glow`                            | ack carries no state                                                                                    |
+| `set_flash`                            | unchanged                                                                                      | `set_flash { action }`                   | **was `{ enabled }`**                                                                                   |
+| `toggle_flash`                         | unchanged                                                                                      | `toggle_flash`                           | ack carries no state                                                                                    |
+| `show_message`                         | `show_message`                                                                                 | `show_message` / `hide_message`          | toggles from `view.message_id`/`view.message_text` (D4); addresses by **stored message number or text** |
+| `hide_display`                         | `hide_message`                                                                                 | `hide_message`                           | renamed                                                                                                 |
+| `show_idle`                            | unchanged                                                                                      | `show_idle`                              | clears the current session, resets `program_elapsed_time`                                               |
+| `setup_timer`                          | `add_session`                                                                                  | `add_session` → optional `start_session` | id read from `ack_response.entity_id` (D3)                                                              |
+| —                                      | `show_session`, `move_session_up`, `move_session_down`, `delete_all_sessions`                  | same names                               | new                                                                                                     |
+| —                                      | `reset_current_session`, `reset_program_elapsed_timer`                                         | same names                               | new                                                                                                     |
+| —                                      | `set_brightness`, `set_is_time_up_display`, `toggle_is_time_up_display`, `delete_all_messages` | same names                               | new                                                                                                     |
+
+### Program management actions (added after the initial port)
+
+Requested by the operator-facing requirement: **no `send_program`**, but message and
+session lists should be manageable from Companion.
+
+| Action                                  | vc146 command    | Notes                                                                      |
+| --------------------------------------- | ---------------- | -------------------------------------------------------------------------- |
+| `add_message`                           | `add_message`    | Reads the new id from `ack_response.entity_id`; adding does not display it |
+| `delete_message`                        | `delete_message` | By 1-based position; device returns `DEVICE_BUSY` while it is on screen    |
+| `move_message_up` / `move_message_down` | same names       | By 1-based position; local no-op when already first / last                 |
+| `move_session_up` / `move_session_down` | same names       | By id, **blank = the current session**; local no-op at the boundaries      |
+
+Every one of these rejects locally rather than provoking a device error, and logs
+why at `debug`/`warn`: an out-of-range message position, an already-first/last
+move, or a blank session id with no current session.
+
+**`generate-protocol` was not needed for these** — the commands were already in the
+generated union; only the action definitions were new.
 
 ### Ad-hoc timer flow (replaces `setup_timer`)
 
@@ -414,7 +441,7 @@ for clients that have not migrated.
 
 ## 8. Variables and feedbacks (as implemented)
 
-### Variables (17)
+### Variables (19)
 
 | Variable                                    | Source (vc146)                     | Notes                               |
 | ------------------------------------------- | ---------------------------------- | ----------------------------------- |
@@ -460,6 +487,57 @@ Still unexposed: `current_session_id`, `current_session_mode`, `progress_bar`,
 `is_blackout` and `is_glowing` are mutually exclusive on the device, so a single
 three-state indicator may be a nicer preset than two buttons — not done.
 
+### Added for the message/session management actions
+
+`current_session_id` and `total_messages` were added to make the management actions
+usable: the reorder/delete message actions address the program's message list by
+1-based position, and `total_messages` is how an operator knows the valid range.
+`current_session_id` backs the `move_session_*` actions' "blank = current session"
+behaviour and makes it debuggable from an expression.
+
+Message and session addressing differs deliberately:
+
+- **Messages are addressed by position.** vc146 message summaries carry no position
+  field — the list order _is_ the position — and action options cannot be populated
+  dynamically (Companion's `options` is a static array, so there is no
+  state-driven dropdown), leaving position as the only address an operator can
+  reason about without copying opaque ids out of the device.
+
+### Correction: `show_message` has always taken an id _or_ text
+
+An earlier revision of this document claimed `show_message` "addresses by text, so a
+stored message cannot be shown by reference". **That was wrong, and it was a mistake
+about the module rather than the protocol.** Both sources support id addressing:
+
+- The document: _"Displays a message, addressed either by a stored program message
+  id or by text"_, with `message_id` and `text` as alternative fields.
+- The vendored schema, `$defs/Command/$defs/show_message`, which encodes it as
+  `anyOf: [{required: [text]}, {required: [message_id]}]`.
+
+The real limitation was that the module's `show_message` action only ever exposed a
+`text` option and sent `{text}`. The action now offers a **stored message number**
+(0 = use the text field), resolving to `message_id` through
+`resolveMessageIdByPosition`, so a stored message is displayed by reference and with
+its own flash settings.
+
+The toggle also became per-message: it hides only when _that_ message is the one on
+screen (comparing `view.message_id` for the id form and `view.message_text` for the
+text form). Previously it hid whenever _any_ message was showing, so a second button
+intended for a different message was swallowed by the first.
+
+The transferable lesson: when deciding something is a protocol limitation, check the
+schema — not just the current implementation.
+
+- **Sessions are addressed by id, defaulting to the current session.** A session has
+  a meaningful "current", so blank means "the one we are on", which is what an
+  operator wants mid-show.
+
+`resolveSessionId`, `sessionPosition` and `resolveMessageIdByPosition` in `logic.ts`
+perform the resolution, including the out-of-range and already-first/already-last
+cases, and are unit-tested. Putting them in `logic.ts` rather than inline in the
+callbacks is deliberate: the `ms`/`offset` bugs shipped precisely because that kind
+of logic lived somewhere tests could not reach.
+
 ---
 
 ## 9. Risks / open questions — resolution status
@@ -477,25 +555,68 @@ three-state indicator may be a nicer preset than two buttons — not done.
 
 ---
 
-## 10. Remaining work, in order
+## 10. Remaining work
 
-0. Commit `src/protocol/**` (it is currently untracked in the working tree). The
-   `protocol-drift` guard reads `git status`, so it reports drift until
-   `src/protocol/generated.ts` is tracked — that is the intended behaviour, not a
-   false positive.
-1. **Correctness debt from this change:** extract the payload-building and
-   validation logic out of the action callbacks into an exported pure module and
-   unit-test it. Today `toWholeMs` and `parseTimeOfDayOffsetMs` are unreachable from
-   tests, which is exactly why the `ms`/`offset` bugs shipped — they were caught by
-   re-reading the spec, not by the suite.
-2. `checkIsFlashing` should OR `view.is_flashing` with `state.messagesFlashing`.
-   Today `messagesFlashing` is written by the state store and read by nothing, and
-   the messages section is a second authoritative report of the same flash.
-3. Reconnect backoff (§6.7 item 1) — client-only, no device needed.
-4. Silence watchdog (§6.7 item 2) — unblocked by §11.
-5. ToD guards, plus the `current_session_mode` / `current_session_id` /
-   `progress_bar` variables (§6.7 item 5, §8).
-6. Offline golden payloads, then the far-side suite run against the device.
+Split by whether the device is needed. The device was placed off-limits after the
+concurrent-suite collision (§11), so §10.1 is the work that can proceed regardless.
+
+### 10.1 No device needed
+
+Ordered by value/effort. All of these are pure code, unit-testable, and none of them
+requires hardware to be _correct_ — only to be _confirmed_.
+
+| #   | Item                                                                                                                                                  | Why it matters                                                                                                                                                                                              | Size   |
+| --- | ----------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------ |
+| 1   | Extract payload-building/validation out of the action callbacks into an exported pure module, with unit tests                                         | This is the root cause of the `ms`/`offset` bugs: `toWholeMs` and `parseToD()` lived where no test could reach them, so the suite was green and wrong                                                       | medium |
+| 2   | `checkIsFlashing` should OR `view.is_flashing` with `state.messagesFlashing`                                                                          | `messagesFlashing` is written by the store and read by nothing. §4.8 now states both sections report the _same_ message flash, so OR-ing cannot false-positive                                              | tiny   |
+| 3   | ToD guards, plus expose `current_session_mode`                                                                                                        | §11 confirmed a ToD session refuses `pause_session`/`add_time`/`subtract_time`/`reset_current_session`; today we send anyway and swallow the error at `warn`, so an operator's button silently does nothing | small  |
+| 4   | Reconnect backoff (1 s → 30 s + jitter, reset on hello)                                                                                               | Currently a fixed 2 s retry forever against a device that may be off                                                                                                                                        | small  |
+| 5   | Silence watchdog (client-initiated ping, reconnect when no pong)                                                                                      | §11 confirmed the device pings every 5.00 s **and** auto-pongs a client `ws.ping()`, so the self-contained form is viable. Needs a fake-socket test for the timeout logic                                   | medium |
+| 6   | Offline golden payloads for every command the module sends                                                                                            | The CI-able half of fixture parity, and the only thing that catches _unit_ errors — schema validation cannot, since `offset: 3600` is a valid integer                                                       | small  |
+| 7   | Remaining pure variables: `progress_bar`, `program_elapsed_time` (+formatted), `screen_name`, `screen_version`, `brightness`, `is_time_up_flashing`   | `progress_bar` (0–100, countdown only) is arguably the most useful thing a stage display is not exposing                                                                                                    | small  |
+| 8   | Presets for the new surface (add/delete/reorder message, stored-message Show, brightness, reset, idle) + a single three-state blackout/glow indicator | The 20 presets still only cover the old surface; blackout and glow are mutually exclusive, so two independent buttons can display an impossible state                                                       | medium |
+| 9   | Optional surface: `update_message`, `delete_session`, `update_session`; a `progress_bar` advanced feedback                                            | `update_message` closes the "fix a typo means delete + re-add" gap. Not requested yet — decide before building                                                                                              | medium |
+
+**Items 1–3 have landed; 4–9 remain.** A status note on each of the three, then the
+detail:
+
+- **1 — done.** New module `src/payloads.ts` holds every payload builder as a pure
+  function returning `{ok: true, payload}` or `{ok: false, kind: 'invalid' | 'noop',
+reason}`. Callbacks are now "build, log the reason, send". The `kind` distinction is
+  what lets a boundary move log at `debug` while a genuine mistake logs at `warn`.
+  Tests went from 45 to **82**.
+- **2 — done.** `checkIsFlashing` ORs `view.is_flashing` with `state.messagesFlashing`,
+  with a test asserting a time-is-up flash is _not_ mistaken for a message flash.
+- **3 — done.** `pause_session`, `toggle_playback`, `add_time`, `subtract_time` and
+  `reset_current_session` skip with an explanatory `debug` log when the current session
+  is a Time of Day wall clock. `current_session_mode` is now a variable.
+
+The extraction paid for itself immediately: it caught a live bug. `isMessageShowing`
+returned **true** for a target with neither an id nor text, because it fell through to
+comparing two empty strings — the kind of thing the old inline version could never have
+surfaced, since nothing could call it with an edge case.
+
+ToD guarding deliberately uses **positive knowledge only**: `isCurrentSessionTimeOfDay`
+returns `false` when the mode is unknown, so an action is never skipped merely because
+state has not arrived. Guarding on "no current session" would instead have silently
+disabled buttons for the window before hydration completes.
+
+### 10.2 Needs the device
+
+1. **The `flash` decision test.** With a flash running, send `show_message` with
+   `flash: false` and observe whether the flash stops (current far-side semantics) or
+   continues (the pinned semantics). Then send it _omitted_ and confirm the flash
+   survives. This resolves §11 finding 1 and the three-state fix's intent.
+2. **Coverage pass for the 10 unexercised actions** listed in §11 (`set_brightness`,
+   `set_flash`, `toggle_flash`, `toggle_glow`, `blackout` disable/toggle, the two
+   `set/toggle_is_time_up_display`, `reset_program_elapsed_timer`, forward
+   `navigate_*`).
+3. **Re-run the message/session management validation** (§11) once nothing else is
+   writing to the display.
+4. **Watchdog under a real link drop** — pull the network and confirm it reconnects
+   rather than sitting on stale state.
+5. **The far-side `test_ws_json_protocol.py` suite**, run **serially** — never while
+   another test is driving the same display (§11).
 
 ---
 
@@ -520,8 +641,10 @@ with `show_idle` + `delete_all_sessions`. **29/29 checks passed.**
   device **auto-pongs a client-initiated `ws.ping()`**. This is what unblocks the
   watchdog, and it means the client-initiated form is viable — the better choice,
   since it does not depend on server behaviour.
-- **Event rate while running: ~2 events/s** (`control_center_status_event` ~1 Hz +
-  `view_status_event` ~1 Hz), silent when idle. This corrects the doc's "~1 Hz".
+- **Event rate while running: ~2 frames/s**, being `control_center_status_event` ~1 Hz
+  plus `view_status_event` ~1 Hz, and silent when idle. This **matches** the
+  document, which gives the rate per event type; an earlier revision of this section
+  wrongly presented it as a discrepancy (see the retraction in the far-side findings).
 - Ad-hoc timer flow (D3): `add_session` returned `entity_id` →
   `start_session {session_id}` → `timer_run_state` `running` with
   `current_session_id` matching.
@@ -551,21 +674,145 @@ with `show_idle` + `delete_all_sessions`. **29/29 checks passed.**
 
 ### Not covered
 
+**The far-side WS suite was confirmed running against this device** during the
+overlapping attempt — `ps` showed
+`test_ws_json_protocol.py 192.168.1.53 --adb-serial …` restarting from a worktree
+named `adhoc-message-design`, so the interference diagnosis below is not a guess.
+
+**Actions never exercised on hardware** (out of 30): `set_brightness`,
+`set_is_time_up_display`, `toggle_is_time_up_display`, `set_flash`, `toggle_flash`,
+`toggle_glow`, `blackout` with `disable`/`toggle`, `reset_program_elapsed_timer`,
+and `show_session`/`navigate_*` in the forward direction (only refusals were seen).
+`move_message_*` and `move_session_*` were attempted but invalidated by the
+interference, so they remain unverified. The `show_message` three-state `flash`
+behaviour is **specifically unverified and needs a decision test**: with a flash
+running, send `show_message` with `flash: false` and see whether the flash stops
+(current semantics) or continues (pinned semantics), then with the field omitted to
+confirm it is left alone.
+
 - `set_brightness` was **not** exercised. A wrong value leaves the display at the
   wrong brightness, and the display sat at `brightness: 80` rather than a known
   baseline, so it was not worth the risk. Test it where that is acceptable.
-- The far-side `test_ws_json_protocol.py` suite has not been run (199 tests, needs a
-  leased device).
+- The far-side `test_ws_json_protocol.py` suite has not been run **by us** (199
+  tests, needs a leased device). Someone else is running it.
 - No link drop occurred during the run, so watchdog behaviour is still unexercised.
+- **The message/session management actions were not validated** — see the
+  interference note below.
 
-### Far-side discrepancies found
+### Concurrent use: the device is not exclusively ours
 
-1. **Doc says push events are "~1 Hz steady state".** Measured ~2 events/s; the
-   figure is per event type, but the doc reads as a per-connection total.
-2. **`settings.default_flash_length` unit looks wrong in the doc.** §4.6 states
-   `default_flash_start_time` and `default_flash_length` are milliseconds, but the
-   device reported `settings.default_flash_length: 4` while `control_center`
-   reported `flash_length: 4000` — evidently the same 4-second flash. So settings
-   appears to be **seconds**. The module reads neither field today, so there is no
-   impact, but anything that exposes flash timing must resolve which side is wrong
-   first.
+A later attempt to validate the new `add_message` / `delete_message` /
+`move_message_*` / `move_session_*` actions against the same display produced 11
+failing assertions out of 18, and the failures were **not module defects**: the
+program was being mutated underneath the run.
+
+Diagnosis (from the far-side repo, not the device):
+
+- `integration_tests/integration_common.py:570` creates
+  `f"Test Message {message_count} - {datetime.now().isoformat()}"`, and exactly that
+  message text (with a timestamp from the same minute) appeared in the device's
+  `message_list` mid-run.
+- `integration_tests/test_ws_json_protocol.py:1355` creates
+  `f"Deep Dive {self._session_counter}"`, and `Deep Dive 1/2/3` appeared as sessions
+  that this run never created.
+- Sessions added by this run (`One`/`Two`/`Three`) were deleted by the other party
+  mid-run, and a fresh `Test Message 1 - …` appeared while the device was only being
+  read.
+
+So **the far-side integration suite was running against 192.168.1.53 at the same
+time.** That invalidates the ordering assertions in that run — and, worse, this
+run's setup and cleanup (`delete_all_sessions`, `delete_all_messages`, `show_idle`,
+`hide_message`) are destructive and will have interfered with it. Any protocol
+test that wipes program state cannot safely share a device with another one.
+
+What the overlapping run _did_ still show, because these are independent of list
+ordering:
+
+- `add_message` returns the new id on `ack_response.entity_id`.
+- The position/boundary guards behave locally: `move message up: already first…`,
+  `move message down: already last…`, `delete message: no message at position 99
+(the program has 1)` — all logged and skipped without a device round trip.
+- **`DEVICE_BUSY` on deleting a displayed message is real:** showing a stored message
+  and then deleting it returned `ok=false code=DEVICE_BUSY message="Cannot delete
+active message"`. This confirms the documented rule.
+- `current_session_id` and `sessionPosition` resolve correctly against live state.
+
+Re-running this validation requires a quiet device. **The lesson worth recording:
+verify exclusivity before mutating a shared display.** A read-only `request_status`
+check cannot detect this — the interference only becomes visible once you write.
+
+### Far-side findings from the re-audit (2026-10-10)
+
+The vendored copies were re-checked against the far-side repository. **Both are
+byte-identical to the pinned `e0b2069a`** (and the schema md5 in
+`docs/CONFORMANCE.md` is correct), so the vendoring claim holds. However the far
+side has moved since the pin: `git diff e0b2069a..HEAD` touches both vendored files
+(+27/−15), and `e0b2069a` is **not** an ancestor of all of it.
+
+1. **`show_message.flash` became three-state after our pin — a behaviour change.**
+   Commit `3fec03ee` _"Make show_message's flash field three-state: omitted keeps,
+   true starts, false stops."_ reconfigured `flash` from `boolean` to
+   `boolean|null` and changed what `false` means:
+   - pinned (`e0b2069a`): _"Omitting it (or sending `false`) leaves the flash state
+     exactly as it is"_ — `false` was a **no-op**;
+   - current: _"`false` turns it off, stopping a flash that is already running"_.
+
+   `git merge-base --is-ancestor 3fec03ee e0b2069a` returns **NO**, so the pinned
+   revision does not contain it — and the version code is **146 on both sides**, so
+   the device's behaviour cannot be inferred from `version_code`. It must be tested.
+
+   The module was always sending a boolean, which was wrong on both readings: it
+   could not express the documented neutral state, and its "Disable" option silently
+   meant different things on different firmware. `show_message` now offers **Leave
+   unchanged / Turn on / Turn off** and omits the field for the first, the only form
+   whose meaning does not depend on the revision. The `Show Message` preset moved
+   from `flash: 'disable'` to `flash: 'keep'` to preserve its original intent —
+   under the new semantics the old value would have started _stopping_ flashes that
+   an operator had deliberately enabled with `Toggle Flash`.
+
+2. **`settings.default_flash_length` / `default_flash_start_time` really are seconds,
+   and the document is wrong.** Previously recorded here as an inference from
+   `4` vs `4000`; it is now sourced. `CommandExecutor.kt:2944` reads
+   `val defaultFlashLength = timerConfig.flashLength / 1000`, and
+   `JsonStatusPayloads.kt:40,74` emit `flash_length` and `default_flash_length` from
+   those two values respectively. The document (§4.6) claims both are
+   **milliseconds**. **Not our bug, but worth filing far-side.** The module reads
+   neither field today.
+
+3. **Retraction: the "~1 Hz is imprecise" claim was wrong.** An earlier revision of
+   this section asserted the document's "~1 Hz steady state" figure was ambiguous and
+   that the truth is "~2 events/s". The document is in fact explicit that the rate is
+   **per event type** — the lifecycle diagram ("`control_center_status_event` …
+   ~1 Hz", "`view_status_event` … ~1 Hz") and the event table ("~1 Hz in steady
+   state" for each) — so ~2 frames/s total is exactly what it describes. The
+   measurement agreed with the document; the discrepancy was invented here.
+
+### Second drift check, before starting items 1–3 (2026-10-10)
+
+Re-checked on request. Findings, and what each decided:
+
+- **Schema: exactly one field has changed since the pin** — `show_message.flash`,
+  `boolean` → `boolean | null`. Already handled by the three-state fix above. So the
+  generated types need no regeneration for our purposes.
+- **Docs: a third substantive change, in `5e8caafb` "Regen docs."** Despite the
+  message, it is not only reflow: `show_message` addressed by `text` is now documented
+  as an **ad-hoc overlay** — _free text on the glass that is **not** one of the loaded
+  program's messages_, with no program read or write, no `program_changed_event`, an
+  empty `view.message_id`, and nothing reporting as showing. Under our pinned doc the
+  `text` form \*reused or **created\*** a stored message, so a controller showing
+  transient text accumulated program messages. Two consequences: showing by `text`
+  needs no program loaded (only the `message_id` form does), and
+  `ack_response.entity_id` comes back only for the `message_id` form. Nothing needed
+  changing — we read `entity_id` only from `add_session`/`add_message` — but it does
+  mean the `Show Message` preset's text form is the transient one.
+- **`settings.default_flash_length` / `default_flash_start_time` really are seconds**,
+  and the document's "milliseconds" is wrong. Upgraded from inference to source:
+  `CommandExecutor.kt:2944` has `val defaultFlashLength = timerConfig.flashLength / 1000`,
+  and `JsonStatusPayloads.kt:40,74` emit `flash_length` / `default_flash_length` from
+  those two values. Not our bug; worth filing far-side.
+- **No `time_of_day` rules changed since the pin** — which is what made item 3 safe to
+  build now rather than waiting.
+- **Decision: do not re-vendor yet.** The far side is visibly mid-flight (a doc regen
+  landed minutes before the check, with the WS suite running from a worktree), and
+  none of the deltas change what the module emits. Re-vendor when it settles, or when
+  we need a specific fix, and treat the diff as reviewable rather than routine.
