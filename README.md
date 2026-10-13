@@ -48,9 +48,12 @@ Do not hand-edit `src/protocol/generated.ts`.
 - `show_message` — Show a message, addressed either by a stored message number or by text; pressing it again for that same message hides it
 - `hide_message` — Take the message off screen without deleting it
 - `add_message` — Append a message to the program's message list
+- `update_message` — Replace the text of a message, by its position in the list
 - `delete_message` — Delete a message by its position in the list (1 = first)
 - `move_message_up` / `move_message_down` — Reorder a message by its position in the list
 - `delete_all_messages` — Remove every message (requires confirmation)
+- `delete_session` — Remove one session (blank id = the current session; refused while it is running)
+- `update_session` — Edit a session, preserving fields left blank (refused while it is running)
 - `show_idle` — Show the idle screen
 
 ## Variables
@@ -69,6 +72,7 @@ Do not hand-edit `src/protocol/generated.ts`.
 - `current_session_number` — Current session number (1-based)
 - `total_sessions` — Total number of sessions in the program
 - `total_messages` — Total number of messages in the program
+- `progress_bar` — Remaining proportion of a countdown, 0–100 (countdown only)
 - `elapsed_formatted` — Formatted elapsed time (MM:SS or HH:MM:SS)
 - `remaining_formatted` — Formatted remaining time (MM:SS or HH:MM:SS)
 - `previous_session_name` — Name of the previous session
@@ -87,6 +91,7 @@ Do not hand-edit `src/protocol/generated.ts`.
 - `message_showing` — Message Is Showing
 - `is_time_up_display` — Time-is-Up Display Enabled
 - `is_time_up_flashing` — Time-is-Up Flash Active
+- `progress_bar` — Session Progress Bar; a colour strip showing the remaining proportion of a countdown
 
 ## Presets
 

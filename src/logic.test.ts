@@ -9,6 +9,8 @@ import {
 	sessionPosition,
 	currentSessionMode,
 	isCurrentSessionTimeOfDay,
+	progressPercent,
+	progressIsMeaningful,
 	checkIsPlaying,
 	checkIsPaused,
 	checkIsIdle,
@@ -121,6 +123,41 @@ describe('extractVariableValues', () => {
 		expect(values.previous_session_name).toBe('')
 		expect(values.next_session_name).toBe('Keynote')
 		expect(values.next_session_presenter_name).toBe('Grace')
+	})
+})
+
+describe('progress', () => {
+	it('reads the device percentage, which is remaining/total scaled to 0-100', () => {
+		// 100 is a full bar at the session's start; 0 means the countdown finished.
+		expect(progressPercent(stateFrom(viewEvent({ progress_bar: 100 })))).toBe(100)
+		expect(progressPercent(stateFrom(viewEvent({ progress_bar: 42.5 })))).toBe(42.5)
+		expect(progressPercent(createInitialState())).toBe(0)
+	})
+
+	it('clamps rather than trusting the device blindly', () => {
+		expect(progressPercent(stateFrom(viewEvent({ progress_bar: 150 })))).toBe(100)
+		expect(progressPercent(stateFrom(viewEvent({ progress_bar: -20 })))).toBe(0)
+	})
+
+	it('exposes the percentage as a variable', () => {
+		expect(extractVariableValues(stateFrom(viewEvent({ progress_bar: 75 }))).progress_bar).toBe(75)
+		expect(extractVariableValues(createInitialState()).progress_bar).toBe(0)
+	})
+
+	it('reports whether the percentage means anything for the current session', () => {
+		// Only a countdown reports a non-zero progress_bar; a count-up or Time of Day
+		// reads 0 for its whole life, and 0 is also "the countdown finished".
+		const countdown = stateFrom(
+			sessionsEvent([{ id: 'c', index: 0, name: 'Down', mode: 'countdown', is_current: true }]),
+		)
+		const countup = stateFrom(sessionsEvent([{ id: 'u', index: 0, name: 'Up', mode: 'countup', is_current: true }]))
+		const tod = stateFrom(sessionsEvent([{ id: 't', index: 0, name: 'Clock', mode: 'time_of_day', is_current: true }]))
+
+		expect(progressIsMeaningful(countdown)).toBe(true)
+		expect(progressIsMeaningful(countup)).toBe(false)
+		expect(progressIsMeaningful(tod)).toBe(false)
+		// Unknown state must not suppress the bar just because nothing has arrived yet.
+		expect(progressIsMeaningful(createInitialState())).toBe(true)
 	})
 })
 

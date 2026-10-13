@@ -13,7 +13,7 @@
 
 import type { CommandPayloads } from './protocol/generated.ts'
 import type { ProtocolState } from './protocol/state.ts'
-import { resolveMessageIdByPosition, resolveSessionId, sessionPosition } from './logic.ts'
+import { checkIsPlaying, resolveMessageIdByPosition, resolveSessionId, sessionPosition } from './logic.ts'
 
 /**
  * A payload ready to send, or why nothing should be sent.
@@ -253,6 +253,204 @@ export function isMessageShowing(
 	// Nothing to compare against. Falling through to the text comparison here would
 	// match an empty view and report that an unaddressed message is on screen.
 	return false
+}
+
+/** `add_message`. Appends to the program's message list; it does not display it. */
+export function buildAddMessage(content: unknown): Built<{ content: string }> {
+	const text = String(content ?? '')
+	if (text.trim().length === 0) {
+		return { ok: false, kind: 'invalid', reason: 'the message text is empty' }
+	}
+	return { ok: true, payload: { content: text } }
+}
+
+/**
+ * `update_message`, addressed by 1-based position in the program's message list.
+ *
+ * Both fields are required by the device, so an empty replacement is rejected here
+ * rather than being sent as a no-op command. Unlike `delete_message`, updating the
+ * message that is on screen is allowed — the device raises `DEVICE_BUSY` only for
+ * deletion.
+ */
+export function buildUpdateMessage(
+	state: ProtocolState,
+	position: unknown,
+	content: unknown,
+): Built<{ message_id: string; content: string }> {
+	const index = Number(position ?? 0)
+	const messageId = resolveMessageIdByPosition(state, index)
+	if (!messageId) {
+		return {
+			ok: false,
+			kind: 'invalid',
+			reason: `no message at position ${index} (the program has ${state.messageList.length})`,
+		}
+	}
+
+	const text = String(content ?? '')
+	if (text.trim().length === 0) {
+		return { ok: false, kind: 'invalid', reason: 'the replacement text is empty' }
+	}
+
+	return { ok: true, payload: { message_id: messageId, content: text } }
+}
+
+/**
+ * Whether a command would touch the session whose timer is currently running.
+ *
+ * vc146 refuses to edit or delete a *running* session (`INVALID_COMMAND` and
+ * `DEVICE_BUSY` respectively). The timer engine is single and global, so "running"
+ * only ever describes the current session.
+ */
+function isRunningCurrentSession(state: ProtocolState, sessionId: string): boolean {
+	if (!checkIsPlaying(state)) return false
+	return sessionId === (state.controlCenter?.current_session_id ?? '')
+}
+
+/**
+ * `delete_session`.
+ *
+ * A blank id means the current session. Deleting the current session while it is
+ * paused or idle also clears the timer and returns the display to IDLE — a side
+ * effect worth knowing, but one the device performs, not us.
+ */
+export function buildDeleteSession(state: ProtocolState, sessionId: unknown): Built<{ session_id: string }> {
+	const resolved = resolveSessionId(state, String(sessionId ?? ''))
+	if (!resolved) {
+		return { ok: false, kind: 'noop', reason: 'no session to delete — none was named and none is current' }
+	}
+
+	if (isRunningCurrentSession(state, resolved)) {
+		return {
+			ok: false,
+			kind: 'noop',
+			reason: 'the current session is running; pause or reset it first',
+		}
+	}
+
+	return { ok: true, payload: { session_id: resolved } }
+}
+
+/** Mode value meaning "leave the session's mode as it is". */
+export const MODE_KEEP = 'keep'
+
+export interface UpdateSessionOptions {
+	sessionId?: unknown
+	name?: unknown
+	mode?: unknown
+	seconds?: unknown
+	offset?: unknown
+	presenterName?: unknown
+	notes?: unknown
+	flashStartSeconds?: unknown
+	flashLengthSeconds?: unknown
+}
+
+/**
+ * `update_session` — edits an existing session, preserving every field left out.
+ *
+ * A blank id means the current session. Two documented rules are enforced here so the
+ * operator gets an explanation instead of a bare device error:
+ *
+ * - a **running** session cannot be edited at all ("pause or reset it first");
+ * - switching a session **to** `time_of_day` needs an `offset`, because a wall clock
+ *   with no start time is not a session.
+ *
+ * Text fields left blank are *omitted*, which preserves them — so these actions can
+ * change a field but not clear one. Clearing would need an explicit "clear" control,
+ * and silently wiping a field on an action usually used to change one thing is the
+ * worse failure.
+ */
+export function buildUpdateSession(
+	state: ProtocolState,
+	options: UpdateSessionOptions,
+): Built<CommandPayloads['update_session']> {
+	const sessionId = resolveSessionId(state, String(options.sessionId ?? ''))
+	if (!sessionId) {
+		return { ok: false, kind: 'noop', reason: 'no session to update — none was named and none is current' }
+	}
+
+	if (isRunningCurrentSession(state, sessionId)) {
+		return {
+			ok: false,
+			kind: 'noop',
+			reason: 'the current session is running; pause or reset it first',
+		}
+	}
+
+	const requestedMode = String(options.mode ?? MODE_KEEP)
+	if (requestedMode !== MODE_KEEP && !SESSION_MODES.includes(requestedMode as SessionMode)) {
+		return { ok: false, kind: 'invalid', reason: `unknown session mode '${requestedMode}'` }
+	}
+
+	const existing = state.sessionList.find((item) => item.id === sessionId)
+	const existingMode = existing?.mode ?? null
+	// Omitted fields are preserved, so an unspecified mode means "whatever it already is".
+	const effectiveMode = requestedMode === MODE_KEEP ? existingMode : requestedMode
+
+	const payload: CommandPayloads['update_session'] = { session_id: sessionId }
+	if (requestedMode !== MODE_KEEP) payload.mode = requestedMode
+
+	const name = optionalText(options.name)
+	if (name) payload.name = name
+
+	const presenter = optionalText(options.presenterName)
+	if (presenter) payload.presenter_name = presenter
+
+	const notes = optionalText(options.notes)
+	if (notes) payload.notes = notes
+
+	const offsetText = optionalText(options.offset)
+	if (offsetText.length > 0) {
+		const offset = parseTimeOfDayOffsetMs(offsetText)
+		if (offset === null) {
+			return { ok: false, kind: 'invalid', reason: 'the offset must be HH:MM:SS within 00:00:00–23:59:59' }
+		}
+		payload.offset = offset
+	} else if (requestedMode === 'time_of_day' && existingMode !== 'time_of_day') {
+		return {
+			ok: false,
+			kind: 'invalid',
+			reason: 'switching a session to time_of_day needs an offset of HH:MM:SS',
+		}
+	}
+
+	if (effectiveMode !== 'time_of_day') {
+		// The duration is entered as text so that blank can mean "leave unchanged" — a
+		// number input always carries a value and would silently rewrite the duration.
+		const secondsText = String(options.seconds ?? '').trim()
+
+		if (secondsText.length > 0) {
+			const seconds = Number(secondsText)
+			if (!Number.isInteger(seconds) || seconds < 0) {
+				return { ok: false, kind: 'invalid', reason: 'the duration must be a whole number of seconds' }
+			}
+			if (effectiveMode === 'countdown' && seconds < COUNTDOWN_MIN_SECONDS) {
+				return {
+					ok: false,
+					kind: 'invalid',
+					reason: `a countdown needs at least ${COUNTDOWN_MIN_SECONDS} second`,
+				}
+			}
+			payload.seconds = seconds
+		} else if (effectiveMode === 'countdown' && (existing?.duration ?? 0) < COUNTDOWN_MIN_SECONDS) {
+			// Switching a session to countdown without a duration would leave a countdown
+			// below the one-second floor, which the device rejects.
+			return {
+				ok: false,
+				kind: 'invalid',
+				reason: 'a countdown needs a duration of at least 1 second',
+			}
+		}
+	}
+
+	const flashStart = Number(options.flashStartSeconds ?? 0)
+	if (Number.isFinite(flashStart) && flashStart > 0) payload.flash_start_time_seconds = flashStart
+
+	const flashLength = Number(options.flashLengthSeconds ?? 0)
+	if (Number.isFinite(flashLength) && flashLength > 0) payload.flash_length_seconds = flashLength
+
+	return { ok: true, payload }
 }
 
 /** `delete_message`, addressed by 1-based position in the program's message list. */

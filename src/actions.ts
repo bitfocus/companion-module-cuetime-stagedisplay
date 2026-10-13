@@ -1,12 +1,17 @@
 import type { ModuleInstance } from './main.ts'
 import {
+	MODE_KEEP,
+	buildAddMessage,
 	buildAddSession,
 	buildBrightness,
 	buildDeleteMessage,
+	buildDeleteSession,
 	buildMessageMove,
 	buildSessionMove,
 	buildShowMessage,
 	buildTimeDelta,
+	buildUpdateMessage,
+	buildUpdateSession,
 	isMessageShowing,
 } from './payloads.ts'
 import { isCurrentSessionTimeOfDay } from './logic.ts'
@@ -298,6 +303,125 @@ export function UpdateActions(self: ModuleInstance): void {
 				await self.sendCommand('move_session_down', built.payload)
 			},
 		},
+		delete_session: {
+			name: 'Delete Session',
+			options: [
+				{
+					type: 'textinput',
+					id: 'session_id',
+					label: 'Session ID (blank = current session)',
+					default: '',
+				},
+			],
+			callback: async (event: ActionEvent) => {
+				const built = buildDeleteSession(self.state, event.options.session_id)
+				if (!built.ok) {
+					self.log(built.kind === 'noop' ? 'debug' : 'warn', `Delete session: ${built.reason}; nothing sent`)
+					return
+				}
+				// Deleting a paused/idle *current* session also returns the display to idle.
+				await self.sendCommand('delete_session', built.payload)
+			},
+		},
+		update_session: {
+			name: 'Update Session',
+			options: [
+				{
+					type: 'textinput',
+					id: 'session_id',
+					label: 'Session ID (blank = current session)',
+					default: '',
+				},
+				{
+					type: 'dropdown',
+					id: 'mode',
+					label: 'Mode',
+					default: MODE_KEEP,
+					choices: [
+						{ id: MODE_KEEP, label: 'Leave unchanged' },
+						{ id: 'countdown', label: 'Countdown' },
+						{ id: 'countup', label: 'Count-up' },
+						{ id: 'time_of_day', label: 'Time of Day' },
+					],
+				},
+				{
+					type: 'textinput',
+					id: 'seconds',
+					label: 'Duration in seconds (blank = leave unchanged)',
+					default: '',
+					tooltip: 'A countdown must end up at least 1 second long.',
+				},
+				{
+					type: 'textinput',
+					id: 'offset',
+					label: 'Offset HH:MM:SS (blank = leave unchanged; time of day only)',
+					default: '',
+				},
+				{
+					type: 'textinput',
+					id: 'name',
+					label: 'Session name (blank = leave unchanged)',
+					default: '',
+				},
+				{
+					type: 'textinput',
+					id: 'presenter_name',
+					label: 'Presenter name (blank = leave unchanged)',
+					default: '',
+				},
+				{
+					type: 'textinput',
+					id: 'notes',
+					label: 'Notes (blank = leave unchanged)',
+					default: '',
+				},
+				{
+					type: 'number',
+					id: 'flash_start_time_seconds',
+					label: 'Flash start (seconds, 0 = leave unchanged)',
+					default: 0,
+					min: 0,
+					max: 86400,
+				},
+				{
+					type: 'number',
+					id: 'flash_length_seconds',
+					label: 'Flash length (seconds, 0 = leave unchanged)',
+					default: 0,
+					min: 0,
+					max: 86400,
+				},
+			],
+			callback: async (event: ActionEvent) => {
+				const built = buildUpdateSession(self.state, {
+					sessionId: event.options.session_id,
+					mode: event.options.mode,
+					seconds: event.options.seconds,
+					offset: event.options.offset,
+					name: event.options.name,
+					presenterName: event.options.presenter_name,
+					notes: event.options.notes,
+					flashStartSeconds: event.options.flash_start_time_seconds,
+					flashLengthSeconds: event.options.flash_length_seconds,
+				})
+				if (!built.ok) {
+					self.log(built.kind === 'noop' ? 'debug' : 'warn', `Update session: ${built.reason}; nothing sent`)
+					return
+				}
+
+				const result = await self.sendCommandDetailed('update_session', built.payload)
+				if (!result.ok) {
+					self.log('warn', `Update session failed: ${result.code ?? 'error'} — ${result.message ?? ''}`)
+					return
+				}
+
+				// Editing the current session re-arms it, discarding any paused position. The
+				// device says so in the ack message, and vc146 expects the integrator to pass
+				// that on because the API has no dialog to confirm in.
+				const message = result.response?.type === 'ack_response' ? result.response.message : null
+				self.log('info', `Session updated${message ? ` — ${message}` : ''}`)
+			},
+		},
 		add_message: {
 			name: 'Add Message',
 			options: [
@@ -309,13 +433,13 @@ export function UpdateActions(self: ModuleInstance): void {
 				},
 			],
 			callback: async (event: ActionEvent) => {
-				const content = String(event.options.content ?? '')
-				if (content.trim().length === 0) {
-					self.log('warn', 'Add message: message text is empty; nothing sent')
+				const built = buildAddMessage(event.options.content)
+				if (!built.ok) {
+					self.log('warn', `Add message: ${built.reason}; nothing sent`)
 					return
 				}
 
-				const result = await self.sendCommandDetailed('add_message', { content })
+				const result = await self.sendCommandDetailed('add_message', built.payload)
 				if (!result.ok) {
 					self.log('warn', `Add message failed: ${result.code ?? 'error'}`)
 					return
@@ -389,6 +513,33 @@ export function UpdateActions(self: ModuleInstance): void {
 					return
 				}
 				await self.sendCommand('move_message_down', built.payload)
+			},
+		},
+		update_message: {
+			name: 'Update Message',
+			options: [
+				{
+					type: 'number',
+					id: 'message_number',
+					label: 'Message number (1 = first)',
+					default: 1,
+					min: 1,
+					max: 999,
+				},
+				{
+					type: 'textinput',
+					id: 'content',
+					label: 'New message text',
+					default: '',
+				},
+			],
+			callback: async (event: ActionEvent) => {
+				const built = buildUpdateMessage(self.state, event.options.message_number, event.options.content)
+				if (!built.ok) {
+					self.log('warn', `Update message: ${built.reason}; nothing sent`)
+					return
+				}
+				await self.sendCommand('update_message', built.payload)
 			},
 		},
 		blackout: {
