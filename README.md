@@ -48,9 +48,12 @@ Do not hand-edit `src/protocol/generated.ts`.
 - `show_message` — Show a message, addressed either by a stored message number or by text; pressing it again for that same message hides it
 - `hide_message` — Take the message off screen without deleting it
 - `add_message` — Append a message to the program's message list
+- `update_message` — Replace the text of a message, by its position in the list
 - `delete_message` — Delete a message by its position in the list (1 = first)
 - `move_message_up` / `move_message_down` — Reorder a message by its position in the list
 - `delete_all_messages` — Remove every message (requires confirmation)
+- `delete_session` — Remove one session (blank id = the current session; refused while it is running)
+- `update_session` — Edit a session, preserving fields left blank (refused while it is running)
 - `show_idle` — Show the idle screen
 
 ## Variables
