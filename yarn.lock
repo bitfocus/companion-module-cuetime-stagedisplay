@@ -650,6 +650,21 @@ __metadata:
   languageName: node
   linkType: hard
 
+"cuetime-stagedisplay@workspace:.":
+  version: 0.0.0-use.local
+  resolution: "cuetime-stagedisplay@workspace:."
+  dependencies:
+    "@companion-module/base": "npm:~2.0.4"
+    "@companion-module/tools": "npm:^3.0.1"
+    "@types/node": "npm:^25.9.3"
+    "@types/ws": "npm:^8.18.2"
+    ajv: "npm:^8.20.0"
+    prettier: "npm:^3.8.3"
+    vitest: "npm:^4.1.8"
+    ws: "npm:^8.22.0"
+  languageName: unknown
+  linkType: soft
+
 "detect-libc@npm:^2.0.3":
   version: 2.1.2
   resolution: "detect-libc@npm:2.1.2"
@@ -1431,21 +1446,6 @@ __metadata:
   checksum: 10c0/f11cf387a26c5c9255bec141a90ac511b26172981b10c3e50053bc6700ea7d2336edcc4a3a21dbb8412fe7c013477d2ba4d7e4877800f3f8107be5105aad6511
   languageName: node
   linkType: hard
-
-"tougtechnologies-cuetime@workspace:.":
-  version: 0.0.0-use.local
-  resolution: "tougtechnologies-cuetime@workspace:."
-  dependencies:
-    "@companion-module/base": "npm:~2.0.4"
-    "@companion-module/tools": "npm:^3.0.1"
-    "@types/node": "npm:^25.9.3"
-    "@types/ws": "npm:^8.18.2"
-    ajv: "npm:^8.20.0"
-    prettier: "npm:^3.8.3"
-    vitest: "npm:^4.1.8"
-    ws: "npm:^8.22.0"
-  languageName: unknown
-  linkType: soft
 
 "ts-declaration-location@npm:^1.0.6":
   version: 1.0.7

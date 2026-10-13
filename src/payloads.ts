@@ -1,0 +1,334 @@
+/**
+ * Pure builders for every command payload this module sends.
+ *
+ * These live outside the action callbacks deliberately. The `ms`-vs-deprecated-
+ * `seconds` bug and the time-of-day `offset`-in-seconds bug both shipped because
+ * the conversions sat inside callbacks that no test could reach — they were caught
+ * by re-reading the spec, not by the suite. Anything that turns operator input into
+ * wire fields belongs here instead, where it can be unit-tested directly.
+ *
+ * Builders do not send anything and do not read the clock: given the same state and
+ * options they always produce the same result, so they are safe to assert on.
+ */
+
+import type { CommandPayloads } from './protocol/generated.ts'
+import type { ProtocolState } from './protocol/state.ts'
+import { resolveMessageIdByPosition, resolveSessionId, sessionPosition } from './logic.ts'
+
+/**
+ * A payload ready to send, or why nothing should be sent.
+ *
+ * `kind` separates operator mistakes from no-ops so callers can log the first at
+ * `warn` and the second at `debug` — pressing "move down" on the last item is not a
+ * problem worth warning about.
+ */
+export type Built<P> = { ok: true; payload: P } | { ok: false; kind: 'invalid' | 'noop'; reason: string }
+
+/** vc146 rejects a countdown shorter than this. */
+export const COUNTDOWN_MIN_SECONDS = 1
+
+export const BRIGHTNESS_MIN = 0
+export const BRIGHTNESS_MAX = 100
+
+export const SESSION_MODES = ['countdown', 'countup', 'time_of_day'] as const
+export type SessionMode = (typeof SESSION_MODES)[number]
+
+function optionalText(value: unknown): string {
+	return String(value ?? '').trim()
+}
+
+/**
+ * Converts user-facing seconds into the whole milliseconds the protocol's `ms`
+ * field wants.
+ *
+ * `add_time` / `subtract_time` still accept a `seconds` field, but it is
+ * deprecated, whole-seconds only, and ignored outright whenever `ms` is nonzero —
+ * so `ms` is the only field worth sending. Fractional seconds are fine here and
+ * become whole milliseconds.
+ */
+export function toWholeMs(seconds: unknown): number | null {
+	const value = Number(seconds ?? 0)
+	if (!Number.isFinite(value)) return null
+	return Math.round(value * 1000)
+}
+
+/**
+ * Parses `HH:MM` / `HH:MM:SS` into **milliseconds past midnight**.
+ *
+ * vc146's `time_of_day` `offset` is milliseconds — confirmed against firmware
+ * (sent `3600000`, echoed `3600000`) — even though it is always a whole number of
+ * seconds.
+ */
+export function parseTimeOfDayOffsetMs(value: string): number | null {
+	const match = /^(\d{1,2}):(\d{2})(?::(\d{2}))?$/.exec(value.trim())
+	if (!match) return null
+
+	const hours = Number(match[1])
+	const minutes = Number(match[2])
+	const seconds = Number(match[3] ?? 0)
+	if (hours > 23 || minutes > 59 || seconds > 59) return null
+
+	return (hours * 3600 + minutes * 60 + seconds) * 1000
+}
+
+/** `add_time` / `subtract_time`. The device treats a negative amount as the inverse. */
+export function buildTimeDelta(seconds: unknown): Built<CommandPayloads['add_time']> {
+	const ms = toWholeMs(seconds)
+	if (ms === null) return { ok: false, kind: 'invalid', reason: 'the amount must be a number of seconds' }
+	return { ok: true, payload: { ms } }
+}
+
+/** `set_brightness`. The device rejects fractional or out-of-range values outright. */
+export function buildBrightness(value: unknown): Built<CommandPayloads['set_brightness']> {
+	const brightness = Number(value ?? 0)
+	if (!Number.isInteger(brightness) || brightness < BRIGHTNESS_MIN || brightness > BRIGHTNESS_MAX) {
+		return {
+			ok: false,
+			kind: 'invalid',
+			reason: `brightness must be a whole number from ${BRIGHTNESS_MIN} to ${BRIGHTNESS_MAX}`,
+		}
+	}
+	return { ok: true, payload: { brightness } }
+}
+
+export interface AddSessionOptions {
+	name?: unknown
+	mode?: unknown
+	seconds?: unknown
+	offset?: unknown
+	presenterName?: unknown
+	notes?: unknown
+	flashStartSeconds?: unknown
+	flashLengthSeconds?: unknown
+}
+
+/**
+ * `add_session`. Appends a session; it does not select or start one.
+ *
+ * Sessions carry their duration in **seconds** (unlike the control-center time
+ * fields, which are milliseconds) and a time-of-day session carries an `offset` in
+ * **milliseconds past midnight** instead of a duration.
+ */
+export function buildAddSession(options: AddSessionOptions): Built<CommandPayloads['add_session']> {
+	const mode = String(options.mode ?? 'countdown') as SessionMode
+	if (!SESSION_MODES.includes(mode)) {
+		return { ok: false, kind: 'invalid', reason: `unknown session mode '${mode}'` }
+	}
+
+	const payload: CommandPayloads['add_session'] = { mode }
+
+	const name = optionalText(options.name)
+	if (name) payload.name = name
+
+	const presenter = optionalText(options.presenterName)
+	if (presenter) payload.presenter_name = presenter
+
+	const notes = optionalText(options.notes)
+	if (notes) payload.notes = notes
+
+	if (mode === 'time_of_day') {
+		// A wall clock has no length, so it takes an offset instead of a duration.
+		const offset = parseTimeOfDayOffsetMs(String(options.offset ?? ''))
+		if (offset === null) {
+			return {
+				ok: false,
+				kind: 'invalid',
+				reason: 'a time-of-day session needs an offset of HH:MM:SS within 00:00:00–23:59:59',
+			}
+		}
+		payload.offset = offset
+	} else {
+		const seconds = Number(options.seconds ?? 0)
+		if (!Number.isInteger(seconds) || seconds < 0) {
+			return {
+				ok: false,
+				kind: 'invalid',
+				reason: 'the duration must be a whole number of seconds',
+			}
+		}
+		// The device rejects a countdown shorter than one second; do not send one.
+		if (mode === 'countdown' && seconds < COUNTDOWN_MIN_SECONDS) {
+			return {
+				ok: false,
+				kind: 'invalid',
+				reason: `a countdown needs at least ${COUNTDOWN_MIN_SECONDS} second`,
+			}
+		}
+		payload.seconds = seconds
+	}
+
+	const flashStart = Number(options.flashStartSeconds ?? 0)
+	if (Number.isFinite(flashStart) && flashStart > 0) payload.flash_start_time_seconds = flashStart
+
+	const flashLength = Number(options.flashLengthSeconds ?? 0)
+	if (Number.isFinite(flashLength) && flashLength > 0) payload.flash_length_seconds = flashLength
+
+	return { ok: true, payload }
+}
+
+export interface ShowMessageOptions {
+	messageNumber?: unknown
+	text?: unknown
+	flash?: unknown
+}
+
+/** The two mutually exclusive addressing forms `show_message` accepts. */
+export type ShowMessageTarget = { message_id: string } | { text: string }
+
+/**
+ * `show_message`, addressed **either** by a stored message's position or by literal
+ * text — the schema requires exactly one of `message_id` / `text` (`anyOf`), and a
+ * non-empty `message_id` wins over `text`.
+ *
+ * Addressed by id it names a program message; addressed by text it is an ad-hoc
+ * overlay that leaves the program untouched (and, unlike the id form, needs no
+ * program loaded).
+ *
+ * `flash` is three-state and is only ever sent when the operator asked for it:
+ * omitting it leaves the flash flag alone, which is the only form whose meaning does
+ * not depend on the firmware revision — `false` means "stop the flash" in the
+ * current protocol revision but was a documented no-op in the revision this module
+ * first pinned, and both report version code 146.
+ */
+export function buildShowMessage(
+	state: ProtocolState,
+	options: ShowMessageOptions,
+): Built<CommandPayloads['show_message']> {
+	const target = buildShowMessageTarget(state, options)
+	if (!target.ok) return target
+
+	const payload: CommandPayloads['show_message'] = { ...target.payload }
+
+	const flash = String(options.flash ?? 'keep')
+	if (flash === 'on') payload.flash = true
+	else if (flash === 'off') payload.flash = false
+
+	return { ok: true, payload }
+}
+
+function buildShowMessageTarget(state: ProtocolState, options: ShowMessageOptions): Built<ShowMessageTarget> {
+	const position = Number(options.messageNumber ?? 0)
+
+	if (position > 0) {
+		const messageId = resolveMessageIdByPosition(state, position)
+		if (!messageId) {
+			return {
+				ok: false,
+				kind: 'invalid',
+				reason: `no stored message at position ${position} (the program has ${state.messageList.length})`,
+			}
+		}
+		return { ok: true, payload: { message_id: messageId } }
+	}
+
+	const text = String(options.text ?? '')
+	if (text.trim().length === 0) {
+		return {
+			ok: false,
+			kind: 'invalid',
+			reason: 'no stored message number was given and the text is empty',
+		}
+	}
+	return { ok: true, payload: { text } }
+}
+
+/**
+ * Whether the given message is the one currently on screen, so a Show Message button
+ * can act as a toggle for *its* message rather than for messages in general.
+ *
+ * Accepts a built payload directly. The two addressing forms are reported in
+ * different fields: a stored message names itself in `view.message_id`, an ad-hoc one
+ * sets `view.message_text` and leaves the id empty.
+ */
+export function isMessageShowing(
+	state: ProtocolState,
+	target: { message_id?: string | null; text?: string | null },
+): boolean {
+	const messageId = target.message_id ?? ''
+	if (messageId.length > 0) return (state.view?.message_id ?? '') === messageId
+
+	const text = target.text ?? ''
+	if (text.length > 0) return (state.view?.message_text ?? '') === text
+
+	// Nothing to compare against. Falling through to the text comparison here would
+	// match an empty view and report that an unaddressed message is on screen.
+	return false
+}
+
+/** `delete_message`, addressed by 1-based position in the program's message list. */
+export function buildDeleteMessage(state: ProtocolState, position: unknown): Built<{ message_id: string }> {
+	const index = Number(position ?? 0)
+	const messageId = resolveMessageIdByPosition(state, index)
+	if (!messageId) {
+		return {
+			ok: false,
+			kind: 'invalid',
+			reason: `no message at position ${index} (the program has ${state.messageList.length})`,
+		}
+	}
+	return { ok: true, payload: { message_id: messageId } }
+}
+
+export type MoveDirection = 'up' | 'down'
+
+/**
+ * `move_message_up` / `move_message_down`, addressed by position.
+ *
+ * A message already at the boundary is a no-op, not an error: the device would
+ * reject it with `INVALID_PARAMETER`, so there is no point asking.
+ */
+export function buildMessageMove(
+	state: ProtocolState,
+	position: unknown,
+	direction: MoveDirection,
+): Built<{ message_id: string }> {
+	const index = Number(position ?? 0)
+	const messageId = resolveMessageIdByPosition(state, index)
+	if (!messageId) {
+		return {
+			ok: false,
+			kind: 'invalid',
+			reason: `no message at position ${index} (the program has ${state.messageList.length})`,
+		}
+	}
+
+	if (direction === 'up' && index === 1) {
+		return { ok: false, kind: 'noop', reason: 'that message is already first in program order' }
+	}
+	if (direction === 'down' && index === state.messageList.length) {
+		return { ok: false, kind: 'noop', reason: 'that message is already last in program order' }
+	}
+
+	return { ok: true, payload: { message_id: messageId } }
+}
+
+/**
+ * `move_session_up` / `move_session_down`.
+ *
+ * A blank session id means the **current** session, which is what an operator means
+ * mid-show; an explicit id overrides it. Boundary moves are no-ops here too.
+ */
+export function buildSessionMove(
+	state: ProtocolState,
+	sessionId: unknown,
+	direction: MoveDirection,
+): Built<{ session_id: string }> {
+	const resolved = resolveSessionId(state, String(sessionId ?? ''))
+	if (!resolved) {
+		return {
+			ok: false,
+			kind: 'noop',
+			reason: 'no session to move — none was named and none is current',
+		}
+	}
+
+	const position = sessionPosition(state, resolved)
+	if (direction === 'up' && position === 1) {
+		return { ok: false, kind: 'noop', reason: 'that session is already first in program order' }
+	}
+	if (direction === 'down' && position !== null && position === state.sessionList.length) {
+		return { ok: false, kind: 'noop', reason: 'that session is already last in program order' }
+	}
+
+	return { ok: true, payload: { session_id: resolved } }
+}

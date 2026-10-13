@@ -1,5 +1,15 @@
 import type { ModuleInstance } from './main.ts'
-import type { CommandPayloads } from './protocol/generated.ts'
+import {
+	buildAddSession,
+	buildBrightness,
+	buildDeleteMessage,
+	buildMessageMove,
+	buildSessionMove,
+	buildShowMessage,
+	buildTimeDelta,
+	isMessageShowing,
+} from './payloads.ts'
+import { isCurrentSessionTimeOfDay } from './logic.ts'
 
 /**
  * Companion hands action callbacks a loosely-typed options bag. Typing the
@@ -9,32 +19,21 @@ import type { CommandPayloads } from './protocol/generated.ts'
 type ActionEvent = { options: Record<string, any> }
 
 /**
- * Converts the action's user-facing seconds into the whole milliseconds the
- * protocol's `ms` field wants. `add_time` / `subtract_time` still accept the
- * older `seconds` field, but it is deprecated and ignored whenever `ms` is
- * nonzero, so `ms` is the only field worth sending.
- */
-function toWholeMs(seconds: unknown): number {
-	const value = Number(seconds ?? 0)
-	return Number.isFinite(value) ? Math.round(value * 1000) : 0
-}
-
-/**
- * Parses `HH:MM` / `HH:MM:SS` into milliseconds past midnight, or null if invalid.
+ * Logs and reports whether a command should be skipped because the current session is
+ * a Time of Day wall clock.
  *
- * The protocol's `time_of_day` `offset` is an integer count of **milliseconds**
- * past midnight (still always a whole number of seconds in practice).
+ * A wall clock has no pause and no length, so vc146 refuses `pause_session`,
+ * `add_time`, `subtract_time` and `reset_current_session` against one. Sending them
+ * anyway means the operator's button does nothing and the only trace is a `warn`
+ * nobody reads, so skip locally with an explanatory log instead.
+ *
+ * Guarding is based on *positive* knowledge: this only skips when the device has told
+ * us the current session's mode, never merely because the state has not arrived yet.
  */
-function parseTimeOfDayOffsetMs(value: string): number | null {
-	const match = /^(\d{1,2}):(\d{2})(?::(\d{2}))?$/.exec(value.trim())
-	if (!match) return null
-
-	const hours = Number(match[1])
-	const minutes = Number(match[2])
-	const seconds = Number(match[3] ?? 0)
-	if (hours > 23 || minutes > 59 || seconds > 59) return null
-
-	return (hours * 3600 + minutes * 60 + seconds) * 1000
+function skipForTimeOfDay(self: ModuleInstance, what: string): boolean {
+	if (!isCurrentSessionTimeOfDay(self.state)) return false
+	self.log('debug', `${what}: the current session is a Time of Day wall clock; nothing sent`)
+	return true
 }
 
 export function UpdateActions(self: ModuleInstance): void {
@@ -60,6 +59,7 @@ export function UpdateActions(self: ModuleInstance): void {
 			name: 'Toggle Playback',
 			options: [],
 			callback: async () => {
+				if (skipForTimeOfDay(self, 'Toggle playback')) return
 				// `timer_run_state` distinguishes paused from idle, which `is_playing` could not.
 				if (self.state.controlCenter?.timer_run_state === 'running') {
 					await self.sendCommand('pause_session')
@@ -79,6 +79,7 @@ export function UpdateActions(self: ModuleInstance): void {
 			name: 'Pause Session',
 			options: [],
 			callback: async () => {
+				if (skipForTimeOfDay(self, 'Pause session')) return
 				await self.sendCommand('pause_session')
 			},
 		},
@@ -86,6 +87,7 @@ export function UpdateActions(self: ModuleInstance): void {
 			name: 'Reset Current Session',
 			options: [],
 			callback: async () => {
+				if (skipForTimeOfDay(self, 'Reset current session')) return
 				await self.sendCommand('reset_current_session')
 			},
 		},
@@ -109,7 +111,13 @@ export function UpdateActions(self: ModuleInstance): void {
 				},
 			],
 			callback: async (event: ActionEvent) => {
-				await self.sendCommand('add_time', { ms: toWholeMs(event.options.seconds) })
+				if (skipForTimeOfDay(self, 'Add time')) return
+				const built = buildTimeDelta(event.options.seconds)
+				if (!built.ok) {
+					self.log('warn', `Add time: ${built.reason}; nothing sent`)
+					return
+				}
+				await self.sendCommand('add_time', built.payload)
 			},
 		},
 		subtract_time: {
@@ -125,7 +133,13 @@ export function UpdateActions(self: ModuleInstance): void {
 				},
 			],
 			callback: async (event: ActionEvent) => {
-				await self.sendCommand('subtract_time', { ms: toWholeMs(event.options.seconds) })
+				if (skipForTimeOfDay(self, 'Subtract time')) return
+				const built = buildTimeDelta(event.options.seconds)
+				if (!built.ok) {
+					self.log('warn', `Subtract time: ${built.reason}; nothing sent`)
+					return
+				}
+				await self.sendCommand('subtract_time', built.payload)
 			},
 		},
 		add_session: {
@@ -199,46 +213,22 @@ export function UpdateActions(self: ModuleInstance): void {
 				},
 			],
 			callback: async (event: ActionEvent) => {
-				const mode = String(event.options.mode ?? 'countdown')
-				const payload: CommandPayloads['add_session'] = { mode }
-
-				const name = String(event.options.name ?? '').trim()
-				if (name) payload.name = name
-
-				const presenter = String(event.options.presenter_name ?? '').trim()
-				if (presenter) payload.presenter_name = presenter
-
-				const notes = String(event.options.notes ?? '').trim()
-				if (notes) payload.notes = notes
-
-				if (mode === 'time_of_day') {
-					const offset = parseTimeOfDayOffsetMs(String(event.options.offset ?? ''))
-					if (offset === null) {
-						self.log('warn', 'Add session: offset must be HH:MM:SS within 00:00:00–23:59:59; nothing sent')
-						return
-					}
-					payload.offset = offset
-				} else {
-					const seconds = Number(event.options.seconds ?? 0)
-					if (!Number.isFinite(seconds) || seconds < 0) {
-						self.log('warn', 'Add session: duration must be a non-negative number of seconds; nothing sent')
-						return
-					}
-					// The device rejects a countdown shorter than one second.
-					if (mode === 'countdown' && seconds < 1) {
-						self.log('warn', 'Add session: a countdown needs at least 1 second; nothing sent')
-						return
-					}
-					payload.seconds = seconds
+				const built = buildAddSession({
+					name: event.options.name,
+					mode: event.options.mode,
+					seconds: event.options.seconds,
+					offset: event.options.offset,
+					presenterName: event.options.presenter_name,
+					notes: event.options.notes,
+					flashStartSeconds: event.options.flash_start_time_seconds,
+					flashLengthSeconds: event.options.flash_length_seconds,
+				})
+				if (!built.ok) {
+					self.log('warn', `Add session: ${built.reason}; nothing sent`)
+					return
 				}
 
-				const flashStart = Number(event.options.flash_start_time_seconds ?? 0)
-				if (flashStart > 0) payload.flash_start_time_seconds = flashStart
-
-				const flashLength = Number(event.options.flash_length_seconds ?? 0)
-				if (flashLength > 0) payload.flash_length_seconds = flashLength
-
-				const result = await self.sendCommandDetailed('add_session', payload)
+				const result = await self.sendCommandDetailed('add_session', built.payload)
 				if (!result.ok) {
 					self.log('warn', `Add session failed: ${result.code ?? 'error'}`)
 					return
@@ -276,14 +266,17 @@ export function UpdateActions(self: ModuleInstance): void {
 				{
 					type: 'textinput',
 					id: 'session_id',
-					label: 'Session ID',
+					label: 'Session ID (blank = current session)',
 					default: '',
 				},
 			],
 			callback: async (event: ActionEvent) => {
-				const sessionId = String(event.options.session_id ?? '').trim()
-				if (!sessionId) return
-				await self.sendCommand('move_session_up', { session_id: sessionId })
+				const built = buildSessionMove(self.state, event.options.session_id, 'up')
+				if (!built.ok) {
+					self.log(built.kind === 'noop' ? 'debug' : 'warn', `Move session up: ${built.reason}; nothing sent`)
+					return
+				}
+				await self.sendCommand('move_session_up', built.payload)
 			},
 		},
 		move_session_down: {
@@ -292,14 +285,110 @@ export function UpdateActions(self: ModuleInstance): void {
 				{
 					type: 'textinput',
 					id: 'session_id',
-					label: 'Session ID',
+					label: 'Session ID (blank = current session)',
 					default: '',
 				},
 			],
 			callback: async (event: ActionEvent) => {
-				const sessionId = String(event.options.session_id ?? '').trim()
-				if (!sessionId) return
-				await self.sendCommand('move_session_down', { session_id: sessionId })
+				const built = buildSessionMove(self.state, event.options.session_id, 'down')
+				if (!built.ok) {
+					self.log(built.kind === 'noop' ? 'debug' : 'warn', `Move session down: ${built.reason}; nothing sent`)
+					return
+				}
+				await self.sendCommand('move_session_down', built.payload)
+			},
+		},
+		add_message: {
+			name: 'Add Message',
+			options: [
+				{
+					type: 'textinput',
+					id: 'content',
+					label: 'Message text',
+					default: '',
+				},
+			],
+			callback: async (event: ActionEvent) => {
+				const content = String(event.options.content ?? '')
+				if (content.trim().length === 0) {
+					self.log('warn', 'Add message: message text is empty; nothing sent')
+					return
+				}
+
+				const result = await self.sendCommandDetailed('add_message', { content })
+				if (!result.ok) {
+					self.log('warn', `Add message failed: ${result.code ?? 'error'}`)
+					return
+				}
+
+				// The device reports the new id on `entity_id`; log it so the new message
+				// can be addressed by position once the list refreshes.
+				const messageId = result.response?.type === 'ack_response' ? (result.response.entity_id ?? null) : null
+				self.log('info', `Added message${messageId ? ` ${messageId}` : ''}`)
+			},
+		},
+		delete_message: {
+			name: 'Delete Message',
+			options: [
+				{
+					type: 'number',
+					id: 'message_number',
+					label: 'Message number (1 = first)',
+					default: 1,
+					min: 1,
+					max: 999,
+				},
+			],
+			callback: async (event: ActionEvent) => {
+				const built = buildDeleteMessage(self.state, event.options.message_number)
+				if (!built.ok) {
+					self.log('warn', `Delete message: ${built.reason}; nothing sent`)
+					return
+				}
+				// The device refuses this with DEVICE_BUSY while the message is on screen.
+				await self.sendCommand('delete_message', built.payload)
+			},
+		},
+		move_message_up: {
+			name: 'Move Message Up',
+			options: [
+				{
+					type: 'number',
+					id: 'message_number',
+					label: 'Message number (1 = first)',
+					default: 1,
+					min: 1,
+					max: 999,
+				},
+			],
+			callback: async (event: ActionEvent) => {
+				const built = buildMessageMove(self.state, event.options.message_number, 'up')
+				if (!built.ok) {
+					self.log(built.kind === 'noop' ? 'debug' : 'warn', `Move message up: ${built.reason}; nothing sent`)
+					return
+				}
+				await self.sendCommand('move_message_up', built.payload)
+			},
+		},
+		move_message_down: {
+			name: 'Move Message Down',
+			options: [
+				{
+					type: 'number',
+					id: 'message_number',
+					label: 'Message number (1 = first)',
+					default: 1,
+					min: 1,
+					max: 999,
+				},
+			],
+			callback: async (event: ActionEvent) => {
+				const built = buildMessageMove(self.state, event.options.message_number, 'down')
+				if (!built.ok) {
+					self.log(built.kind === 'noop' ? 'debug' : 'warn', `Move message down: ${built.reason}; nothing sent`)
+					return
+				}
+				await self.sendCommand('move_message_down', built.payload)
 			},
 		},
 		blackout: {
@@ -367,8 +456,7 @@ export function UpdateActions(self: ModuleInstance): void {
 				},
 			],
 			callback: async (event: ActionEvent) => {
-				const action = String(event.options.action ?? 'enable')
-				await self.sendCommand('set_flash', { action })
+				await self.sendCommand('set_flash', { action: String(event.options.action ?? 'enable') })
 			},
 		},
 		toggle_flash: {
@@ -382,36 +470,56 @@ export function UpdateActions(self: ModuleInstance): void {
 			name: 'Show Message',
 			options: [
 				{
+					type: 'number',
+					id: 'message_number',
+					label: 'Stored message number (0 = use the text below)',
+					default: 0,
+					min: 0,
+					max: 999,
+					tooltip:
+						'Addresses a message already in the program by its position, so it is shown with its own flash settings.',
+				},
+				{
 					type: 'textinput',
 					id: 'text',
-					label: 'Message text',
+					label: 'Message text (ignored when a stored message number is set)',
 					default: 'Break Time',
+					tooltip: 'Ad-hoc text. The program is not changed, and unlike a stored message this needs no program loaded.',
 				},
 				{
 					type: 'dropdown',
 					id: 'flash',
-					label: 'Flash the message',
-					default: 'disable',
+					label: 'Message flash',
+					default: 'keep',
 					choices: [
-						{ id: 'enable', label: 'Enable' },
-						{ id: 'disable', label: 'Disable' },
+						{ id: 'keep', label: 'Leave unchanged' },
+						{ id: 'on', label: 'Turn on' },
+						{ id: 'off', label: 'Turn off' },
 					],
+					tooltip:
+						'The flash flag is shared with Set/Toggle Flash. "Leave unchanged" omits the field, the only form whose meaning does not depend on firmware version.',
 				},
 			],
 			callback: async (event: ActionEvent) => {
-				// Pressing again takes the message down, so one button can toggle it.
-				if (self.state.view?.message_text) {
+				const built = buildShowMessage(self.state, {
+					messageNumber: event.options.message_number,
+					text: event.options.text,
+					flash: event.options.flash,
+				})
+				if (!built.ok) {
+					self.log('warn', `Show message: ${built.reason}; nothing sent`)
+					return
+				}
+
+				// Pressing the button again takes *this* message down, so one button toggles.
+				// Compare against the specific message rather than "any message is showing",
+				// so a second button for a different message is not swallowed by the first.
+				if (isMessageShowing(self.state, built.payload)) {
 					await self.sendCommand('hide_message')
 					return
 				}
 
-				const text = String(event.options.text ?? '')
-				if (!text) {
-					self.log('warn', 'Show message: message text is empty; nothing sent')
-					return
-				}
-
-				await self.sendCommand('show_message', { text, flash: event.options.flash === 'enable' })
+				await self.sendCommand('show_message', built.payload)
 			},
 		},
 		hide_message: {
@@ -441,13 +549,12 @@ export function UpdateActions(self: ModuleInstance): void {
 				},
 			],
 			callback: async (event: ActionEvent) => {
-				const brightness = Number(event.options.brightness ?? 0)
-				// The device rejects fractional or out-of-range values outright.
-				if (!Number.isInteger(brightness) || brightness < 0 || brightness > 100) {
-					self.log('warn', 'Set brightness: brightness must be a whole number from 0 to 100; nothing sent')
+				const built = buildBrightness(event.options.brightness)
+				if (!built.ok) {
+					self.log('warn', `Set brightness: ${built.reason}; nothing sent`)
 					return
 				}
-				await self.sendCommand('set_brightness', { brightness })
+				await self.sendCommand('set_brightness', built.payload)
 			},
 		},
 		set_is_time_up_display: {

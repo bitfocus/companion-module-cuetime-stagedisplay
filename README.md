@@ -36,8 +36,8 @@ Do not hand-edit `src/protocol/generated.ts`.
 - `reset_current_session` — Return the current session to its configured start value, paused
 - `reset_program_elapsed_timer` — Reset the program elapsed counter
 - `add_session` — Append a session (mode, duration or time-of-day offset, presenter, notes, flash timing), optionally starting it
-- `move_session_up` / `move_session_down` — Reorder a session by id
-- `delete_all_sessions` / `delete_all_messages` — Remove every session or message (requires confirmation)
+- `move_session_up` / `move_session_down` — Reorder a session (blank session id = the current session)
+- `delete_all_sessions` — Remove every session (requires confirmation)
 - `add_time` — Add seconds to the timer
 - `subtract_time` — Subtract seconds from the timer
 - `blackout` — Enable, disable, or toggle blackout
@@ -45,8 +45,12 @@ Do not hand-edit `src/protocol/generated.ts`.
 - `set_flash` / `toggle_flash` — Control the message flash
 - `set_brightness` — Set the backlight (whole number, 0–100)
 - `set_is_time_up_display` / `toggle_is_time_up_display` — Control the time-is-up overlay
-- `show_message` — Show a message; pressing again while one is on screen hides it
+- `show_message` — Show a message, addressed either by a stored message number or by text; pressing it again for that same message hides it
 - `hide_message` — Take the message off screen without deleting it
+- `add_message` — Append a message to the program's message list
+- `delete_message` — Delete a message by its position in the list (1 = first)
+- `move_message_up` / `move_message_down` — Reorder a message by its position in the list
+- `delete_all_messages` — Remove every message (requires confirmation)
 - `show_idle` — Show the idle screen
 
 ## Variables
@@ -56,12 +60,15 @@ Do not hand-edit `src/protocol/generated.ts`.
 - `timer` — Current on-screen reading (ms, unsigned)
 - `current_session_name` — Current session name
 - `current_presenter_name` — Current presenter name
+- `current_session_id` — Current session id (empty when idle)
+- `current_session_mode` — Current session mode (`countdown`/`countup`/`time_of_day`, empty when idle)
 - `is_playing` — Whether timer is running ("Yes"/"No")
 - `is_glowing` — Whether glow effect is active ("Yes"/"No")
 - `is_blackout` — Whether blackout mode is active ("Yes"/"No")
 - `message_text` — Current message text
 - `current_session_number` — Current session number (1-based)
 - `total_sessions` — Total number of sessions in the program
+- `total_messages` — Total number of messages in the program
 - `elapsed_formatted` — Formatted elapsed time (MM:SS or HH:MM:SS)
 - `remaining_formatted` — Formatted remaining time (MM:SS or HH:MM:SS)
 - `previous_session_name` — Name of the previous session
