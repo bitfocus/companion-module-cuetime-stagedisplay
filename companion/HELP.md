@@ -54,7 +54,9 @@ says why instead of a button appearing to be broken.
 ### Sessions
 
 - **Add Session** — Append a session to the program, with mode, duration or time-of-day offset, presenter, notes and flash timing, and optionally start it immediately. Refuses to send a countdown shorter than 1 second, which the device rejects.
+- **Update Session** — Edit an existing session. Leave the session id blank to edit the current one, and leave any field blank to preserve it. Two device rules are enforced up front: a **running** session cannot be edited (pause or reset it first), and switching a session **to** Time of Day requires an offset. Editing the current, non-running session re-arms it immediately and **discards the position it was paused at** — the device says so in its reply, and the module logs that message.
 - **Move Session Up** / **Move Session Down** — Reorder a session. Leave the session id blank to move the **current** session, which is usually what an operator wants mid-show. Does nothing when the session is already first (up) or last (down), rather than provoking a device error.
+- **Delete Session** — Remove one session. Blank means the current session. Refused while that session's timer is running. Deleting a paused or idle _current_ session also clears the timer and returns the display to the idle screen.
 - **Delete All Sessions** — Remove every session. Requires the confirm checkbox to be ticked.
 
 ### Time adjustment
@@ -84,8 +86,12 @@ many there are.
 `show_message` accepts **either** a stored message number **or** literal text. A
 stored message is shown with its own configured flash settings, which is why
 addressing it by number is preferable when the message already exists in the program.
+The two forms differ in reach: a stored message is a program message, whereas literal
+text is an ad-hoc overlay that leaves the program untouched — and unlike the stored
+form, it needs no program loaded.
 
 - **Add Message** — Append a message to the program's message list. Adding does not display it; use **Show Message** for that.
+- **Update Message** — Replace the text of the message at a given position. Allowed even while that message is on screen (only _deleting_ a displayed message is refused).
 - **Delete Message** — Delete the message at a given position. The device refuses this while that message is on screen ("device busy"), so hide it first.
 - **Move Message Up** / **Move Message Down** — Reorder the message at a given position. Does nothing when it is already first (up) or last (down).
 - **Delete All Messages** — Remove every message. Requires the confirm checkbox to be ticked.
@@ -108,6 +114,7 @@ addressing it by number is preferable when the message already exists in the pro
 - **current_session_number** — Current session number (1-based, e.g., 2 for the second session)
 - **total_sessions** — Total number of sessions in the program
 - **total_messages** — Total number of messages in the program
+- **progress_bar** — Remaining proportion of a **countdown**, 0–100 (100 at the start, 0 when it finishes). Count-up and Time of Day sessions always read 0.
 - **elapsed_formatted** — Formatted elapsed time (MM:SS or HH:MM:SS)
 - **remaining_formatted** — Formatted remaining time (MM:SS or HH:MM:SS)
 - **previous_session_name** — Name of the session before the current one
@@ -127,6 +134,7 @@ addressing it by number is preferable when the message already exists in the pro
 - **Message Is Showing** — A message is on screen
 - **Time-is-Up Display Enabled** — The time-is-up overlay is enabled
 - **Time-is-Up Flash Active** — The time-is-up flash is running
+- **Session Progress Bar** — Draws the remaining proportion as a colour strip along the bottom or top edge of the button, optionally with the percentage as text. **The device only reports a progress percentage for a countdown session**, so on a count-up or Time of Day session the bar stays empty for the session's whole life — worth checking which sessions a button will be used during. The strip is a raw pixel buffer refreshed on each state event, so a thick bar costs more to draw than a thin one.
 
 ## Presets
 

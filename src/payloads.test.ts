@@ -3,13 +3,18 @@ import {
 	BRIGHTNESS_MAX,
 	BRIGHTNESS_MIN,
 	COUNTDOWN_MIN_SECONDS,
+	MODE_KEEP,
+	buildAddMessage,
 	buildAddSession,
 	buildBrightness,
 	buildDeleteMessage,
+	buildDeleteSession,
 	buildMessageMove,
 	buildSessionMove,
 	buildShowMessage,
 	buildTimeDelta,
+	buildUpdateMessage,
+	buildUpdateSession,
 	isMessageShowing,
 	parseTimeOfDayOffsetMs,
 	toWholeMs,
@@ -289,6 +294,202 @@ describe('message position actions', () => {
 		// But moving the same messages the other way is fine.
 		expect(buildMessageMove(threeMessages, 1, 'down').ok).toBe(true)
 		expect(buildMessageMove(threeMessages, 3, 'up').ok).toBe(true)
+	})
+})
+
+describe('buildUpdateMessage', () => {
+	it('resolves the position to an id and sends the replacement text', () => {
+		expect(buildUpdateMessage(threeMessages, 2, 'New text')).toEqual({
+			ok: true,
+			payload: { message_id: 'm2', content: 'New text' },
+		})
+	})
+
+	it('rejects an out-of-range position and empty replacement text', () => {
+		expect(reasonOf(buildUpdateMessage(threeMessages, 9, 'x'))).toContain('position 9')
+		expect(reasonOf(buildUpdateMessage(threeMessages, 1, '   '))).toContain('empty')
+	})
+
+	it('is allowed on the message that is on screen, unlike deletion', () => {
+		// The device raises DEVICE_BUSY only for deleting a displayed message.
+		const showing = stateFrom(messagesEvent({ message_list: [{ id: 'm1', text: 'Alpha', is_showing: true }] }))
+		expect(buildUpdateMessage(showing, 1, 'Alpha v2').ok).toBe(true)
+	})
+})
+
+describe('buildAddMessage', () => {
+	it('accepts non-blank text and rejects only blank', () => {
+		expect(buildAddMessage('Break')).toEqual({ ok: true, payload: { content: 'Break' } })
+		expect(reasonOf(buildAddMessage('  '))).toContain('empty')
+		expect(reasonOf(buildAddMessage(undefined))).toContain('empty')
+	})
+})
+
+describe('buildDeleteSession', () => {
+	it('treats a blank id as the current session', () => {
+		expect(buildDeleteSession(threeSessions, '')).toEqual({ ok: true, payload: { session_id: 's2' } })
+	})
+
+	it('refuses while the current session is running, which the device calls DEVICE_BUSY', () => {
+		const running = stateFrom(
+			sessionsEvent([{ id: 's1', index: 0, name: 'One', is_current: true }]),
+			controlCenterEvent({ timer_run_state: 'running', current_session_id: 's1' }),
+		)
+		const built = buildDeleteSession(running, '')
+		expect(built.ok).toBe(false)
+		if (!built.ok) {
+			expect(built.kind).toBe('noop')
+			expect(built.reason).toContain('pause or reset')
+		}
+	})
+
+	it('allows deleting a paused current session, which clears the timer', () => {
+		const paused = stateFrom(
+			sessionsEvent([{ id: 's1', index: 0, name: 'One', is_current: true }]),
+			controlCenterEvent({ timer_run_state: 'paused', current_session_id: 's1' }),
+		)
+		expect(buildDeleteSession(paused, '').ok).toBe(true)
+	})
+
+	it('allows deleting a different session while one runs', () => {
+		const running = stateFrom(
+			sessionsEvent([
+				{ id: 's1', index: 0, name: 'One', is_current: true },
+				{ id: 's2', index: 1, name: 'Two' },
+			]),
+			controlCenterEvent({ timer_run_state: 'running', current_session_id: 's1' }),
+		)
+		expect(buildDeleteSession(running, 's2')).toEqual({ ok: true, payload: { session_id: 's2' } })
+	})
+})
+
+describe('buildUpdateSession', () => {
+	const editable = stateFrom(
+		sessionsEvent([
+			{ id: 's1', index: 0, name: 'One', mode: 'countdown', duration: 30 },
+			{ id: 's2', index: 1, name: 'Two', mode: 'countdown', duration: 30, is_current: true },
+		]),
+		controlCenterEvent({ timer_run_state: 'paused', current_session_id: 's2', current_session_index: 1 }),
+	)
+
+	it('defaults to the current session and sends only the id when nothing changes', () => {
+		expect(buildUpdateSession(editable, { mode: MODE_KEEP })).toEqual({
+			ok: true,
+			payload: { session_id: 's2' },
+		})
+	})
+
+	it('preserves omitted fields by omitting them from the payload', () => {
+		// Every text field blank => nothing but the id, so nothing is overwritten.
+		const built = buildUpdateSession(editable, {
+			mode: MODE_KEEP,
+			name: '',
+			presenterName: '   ',
+			notes: '',
+			seconds: '',
+			offset: '',
+		})
+		expect(built).toEqual({ ok: true, payload: { session_id: 's2' } })
+	})
+
+	it('sends only the fields that were given', () => {
+		expect(buildUpdateSession(editable, { mode: MODE_KEEP, name: 'Renamed' })).toEqual({
+			ok: true,
+			payload: { session_id: 's2', name: 'Renamed' },
+		})
+		expect(buildUpdateSession(editable, { mode: MODE_KEEP, seconds: '90' })).toEqual({
+			ok: true,
+			payload: { session_id: 's2', seconds: 90 },
+		})
+	})
+
+	it('refuses to edit a running session', () => {
+		const running = stateFrom(
+			sessionsEvent([{ id: 's2', index: 0, name: 'Two', mode: 'countdown', duration: 30, is_current: true }]),
+			controlCenterEvent({ timer_run_state: 'running', current_session_id: 's2' }),
+		)
+		const built = buildUpdateSession(running, { mode: MODE_KEEP, name: 'Nope' })
+		expect(built.ok).toBe(false)
+		if (!built.ok) {
+			expect(built.kind).toBe('noop')
+			expect(built.reason).toContain('pause or reset')
+		}
+	})
+
+	it('carries a time-of-day start as milliseconds past midnight', () => {
+		expect(buildUpdateSession(editable, { mode: 'time_of_day', offset: '01:00:00' })).toEqual({
+			ok: true,
+			payload: { session_id: 's2', mode: 'time_of_day', offset: 3600000 },
+		})
+	})
+
+	it('requires an offset when switching a session to time of day', () => {
+		// The device rejects this; catch it locally with a clearer message.
+		const built = buildUpdateSession(editable, { mode: 'time_of_day' })
+		expect(built.ok).toBe(false)
+		if (!built.ok) expect(built.reason).toContain('needs an offset')
+	})
+
+	it('lets an existing time-of-day session keep its start time', () => {
+		const tod = stateFrom(
+			sessionsEvent([{ id: 't', index: 0, name: 'Clock', mode: 'time_of_day', is_current: true }]),
+			controlCenterEvent({ timer_run_state: 'paused', current_session_id: 't' }),
+		)
+		// Mode and offset both omitted => not a switch, so the start time is preserved.
+		expect(buildUpdateSession(tod, { mode: MODE_KEEP, name: 'Renamed' })).toEqual({
+			ok: true,
+			payload: { session_id: 't', name: 'Renamed' },
+		})
+	})
+
+	it('never sends a duration for a time-of-day session', () => {
+		const built = buildUpdateSession(editable, { mode: 'time_of_day', offset: '12:00:00', seconds: '600' })
+		expect(built.ok).toBe(true)
+		if (built.ok) expect(built.payload).not.toHaveProperty('seconds')
+	})
+
+	it('enforces the one-second floor on the resulting countdown', () => {
+		expect(reasonOf(buildUpdateSession(editable, { mode: MODE_KEEP, seconds: '0' }))).toContain('at least 1 second')
+		expect(reasonOf(buildUpdateSession(editable, { mode: MODE_KEEP, seconds: '1.5' }))).toContain('whole number')
+		expect(buildUpdateSession(editable, { mode: MODE_KEEP, seconds: '1' }).ok).toBe(true)
+	})
+
+	it('refuses to switch a session to countdown with no duration to fall back on', () => {
+		// A count-up may be lengthless; a countdown may not.
+		const countup = stateFrom(
+			sessionsEvent([{ id: 'c', index: 0, name: 'Up', mode: 'countup', is_current: true }]),
+			controlCenterEvent({ timer_run_state: 'paused', current_session_id: 'c' }),
+		)
+		const built = buildUpdateSession(countup, { mode: 'countdown' })
+		expect(built.ok).toBe(false)
+		if (!built.ok) expect(built.reason).toContain('duration')
+
+		// But supplying one is fine.
+		expect(buildUpdateSession(countup, { mode: 'countdown', seconds: '30' })).toEqual({
+			ok: true,
+			payload: { session_id: 'c', mode: 'countdown', seconds: 30 },
+		})
+	})
+
+	it('includes flash timing only when positive', () => {
+		const built = buildUpdateSession(editable, {
+			mode: MODE_KEEP,
+			flashStartSeconds: 15,
+			flashLengthSeconds: 0,
+		})
+		expect(built).toEqual({
+			ok: true,
+			payload: { session_id: 's2', flash_start_time_seconds: 15 },
+		})
+	})
+
+	it('reports no-ops when there is nothing to update', () => {
+		const built = buildUpdateSession(createInitialState(), { mode: MODE_KEEP })
+		expect(built.ok).toBe(false)
+		if (!built.ok) {
+			expect(built.kind).toBe('noop')
+			expect(built.reason).toContain('no session')
+		}
 	})
 })
 
