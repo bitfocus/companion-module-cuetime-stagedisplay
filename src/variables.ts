@@ -21,6 +21,7 @@ export function UpdateVariableDefinitions(self: ModuleInstance): void {
 		current_session_number: { name: 'Current Session Number' },
 		total_sessions: { name: 'Total Sessions' },
 		total_messages: { name: 'Total Messages' },
+		progress_bar: { name: 'Progress (remaining %, countdown only)' },
 		elapsed_formatted: { name: 'Elapsed Time' },
 		remaining_formatted: { name: 'Remaining Time' },
 		previous_session_name: { name: 'Previous Session Name' },

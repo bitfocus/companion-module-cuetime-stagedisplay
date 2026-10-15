@@ -1,5 +1,12 @@
-import { describe, it, expect, beforeEach, afterEach } from 'vitest'
-import { ProtocolClient } from './client.ts'
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
+import {
+	LIVENESS_INTERVAL_MS,
+	ProtocolClient,
+	RECONNECT_BASE_MS,
+	RECONNECT_MAX_MS,
+	SILENCE_TIMEOUT_MS,
+	reconnectDelayMs,
+} from './client.ts'
 import type { ClientStatus, WebSocketLike } from './client.ts'
 import type { Event, Response } from './generated.ts'
 import { controlCenterEvent, helloEvent } from './fixtures.ts'
@@ -15,6 +22,8 @@ type FakeReply = { type: Response['type'] } & Record<string, unknown>
 class FakeWebSocket implements WebSocketLike {
 	readyState = 0 // CONNECTING
 	readonly sent: string[] = []
+	/** Count of application-level pings the client has sent on this socket. */
+	pings = 0
 	handler: (command: Record<string, any>) => FakeReply = (command) => ({
 		type: 'ack_response',
 		message: 'accepted',
@@ -29,6 +38,10 @@ class FakeWebSocket implements WebSocketLike {
 		const listeners = this.listeners.get(event) ?? []
 		listeners.push(listener)
 		this.listeners.set(event, listeners)
+	}
+
+	ping(): void {
+		this.pings += 1
 	}
 
 	send(data: string, cb?: (err?: Error) => void): void {
@@ -46,7 +59,6 @@ class FakeWebSocket implements WebSocketLike {
 			cb?.(error as Error)
 		}
 	}
-
 	close(code?: number, reason?: string): void {
 		this.readyState = 3 // CLOSED
 		this.fire('close', code, reason)
@@ -61,6 +73,15 @@ class FakeWebSocket implements WebSocketLike {
 
 	emit(raw: string): void {
 		this.fire('message', raw)
+	}
+
+	/** Server-side liveness frames, which satisfy the watchdog just as messages do. */
+	emitPong(): void {
+		this.fire('pong')
+	}
+
+	emitPing(): void {
+		this.fire('ping')
 	}
 
 	private fire(event: string, ...args: any[]): void {
@@ -215,5 +236,218 @@ describe('ProtocolClient', () => {
 		const result = await inFlight
 		expect(result.ok).toBe(false)
 		expect(result.code).toBe('DISCONNECTED')
+	})
+})
+
+describe('reconnectDelayMs', () => {
+	it('doubles per attempt, with jitter between half and all of the capped delay', () => {
+		const low = (): number => 0
+		const high = (): number => 1
+
+		expect(reconnectDelayMs(0, 1000, 30000, low)).toBe(500)
+		expect(reconnectDelayMs(0, 1000, 30000, high)).toBe(1000)
+		expect(reconnectDelayMs(1, 1000, 30000, low)).toBe(1000)
+		expect(reconnectDelayMs(2, 1000, 30000, low)).toBe(2000)
+		expect(reconnectDelayMs(3, 1000, 30000, low)).toBe(4000)
+	})
+
+	it('never exceeds the ceiling, however many attempts have failed', () => {
+		for (let attempt = 0; attempt < 40; attempt += 1) {
+			const delay = reconnectDelayMs(attempt, RECONNECT_BASE_MS, RECONNECT_MAX_MS)
+			expect(delay).toBeLessThanOrEqual(RECONNECT_MAX_MS)
+			expect(delay).toBeGreaterThan(0)
+		}
+
+		// Only once the cap is reached does the jitter band sit at the ceiling rather
+		// than below it; at low attempts the delay is legitimately much smaller.
+		expect(reconnectDelayMs(0, RECONNECT_BASE_MS, RECONNECT_MAX_MS)).toBeLessThanOrEqual(RECONNECT_BASE_MS)
+		expect(reconnectDelayMs(40, RECONNECT_BASE_MS, RECONNECT_MAX_MS)).toBeGreaterThanOrEqual(RECONNECT_MAX_MS / 2)
+	})
+
+	it('defaults to a 1 s base capped at 30 s', () => {
+		expect(RECONNECT_BASE_MS).toBe(1000)
+		expect(RECONNECT_MAX_MS).toBe(30000)
+	})
+})
+
+/**
+ * Reconnect and liveness policy, exercised on fake timers so the backoff growth and
+ * the watchdog deadline can be observed exactly rather than waited for.
+ */
+describe('ProtocolClient reconnection and liveness', () => {
+	const BASE = 100
+	const MAX = 800
+	const INTERVAL = 1000
+	const SILENCE = 3000
+
+	let client: ProtocolClient
+	let sockets: FakeWebSocket[]
+	let warnings: string[]
+
+	function lastSocket(): FakeWebSocket {
+		const socket = sockets.at(-1)
+		if (!socket) throw new Error('no socket was created')
+		return socket
+	}
+
+	/** Brings the newest socket up and completes the handshake. */
+	function connectAndHandshake(): FakeWebSocket {
+		const socket = lastSocket()
+		socket.triggerOpen()
+		socket.emit(JSON.stringify(helloEvent()))
+		return socket
+	}
+
+	beforeEach(() => {
+		vi.useFakeTimers()
+		sockets = []
+		warnings = []
+		client = new ProtocolClient({
+			host: 'localhost',
+			port: 1234,
+			log: (level, message) => {
+				if (level === 'warn') warnings.push(message)
+			},
+			socketFactory: (url) => {
+				const socket = new FakeWebSocket(url)
+				sockets.push(socket)
+				return socket
+			},
+			reconnectBaseMs: BASE,
+			reconnectMaxMs: MAX,
+			livenessIntervalMs: INTERVAL,
+			silenceTimeoutMs: SILENCE,
+			// Deterministic jitter: the low end of the range, i.e. half the capped delay.
+			random: () => 0,
+		})
+	})
+
+	afterEach(() => {
+		client.stop()
+		vi.useRealTimers()
+	})
+
+	it('waits half the base delay, then doubles on each successive failure', () => {
+		client.start()
+		connectAndHandshake()
+
+		// attempt 0 -> capped 100, delay 50
+		lastSocket().close(1006, 'lost')
+		vi.advanceTimersByTime(BASE / 2 - 1)
+		expect(sockets).toHaveLength(1)
+		vi.advanceTimersByTime(1)
+		expect(sockets).toHaveLength(2)
+
+		// attempt 1 -> capped 200, delay 100
+		lastSocket().close(1006, 'lost')
+		vi.advanceTimersByTime(99)
+		expect(sockets).toHaveLength(2)
+		vi.advanceTimersByTime(1)
+		expect(sockets).toHaveLength(3)
+
+		// attempt 2 -> capped 400, delay 200
+		lastSocket().close(1006, 'lost')
+		vi.advanceTimersByTime(199)
+		expect(sockets).toHaveLength(3)
+		vi.advanceTimersByTime(1)
+		expect(sockets).toHaveLength(4)
+	})
+
+	it('resets the backoff once a handshake completes', () => {
+		client.start()
+		connectAndHandshake()
+
+		// Fail several times so the delay has grown well past the base.
+		for (let i = 0; i < 4; i += 1) {
+			lastSocket().close(1006, 'lost')
+			vi.advanceTimersByTime(MAX)
+		}
+
+		// Now let one attempt succeed, then drop it: the delay is back to the base.
+		connectAndHandshake()
+		lastSocket().close(1006, 'lost')
+		vi.advanceTimersByTime(BASE / 2 - 1)
+		expect(sockets).toHaveLength(sockets.length)
+		const before = sockets.length
+		vi.advanceTimersByTime(1)
+		expect(sockets).toHaveLength(before + 1)
+	})
+
+	it('caps the delay so a device that is off is not hammered', () => {
+		client.start()
+		for (let i = 0; i < 12; i += 1) {
+			lastSocket().close(1006, 'lost')
+			// Advancing by less than the capped delay must not produce a new socket.
+			vi.advanceTimersByTime(MAX / 2 - 1)
+		}
+		const count = sockets.length
+		vi.advanceTimersByTime(1)
+		expect(sockets).toHaveLength(count + 1)
+	})
+
+	it('reconnects when the link goes silent, without waiting for a close event', () => {
+		client.start()
+		connectAndHandshake()
+		expect(client.status).toBe('live')
+
+		// No frames of any kind; the watchdog should give up after the silence timeout.
+		vi.advanceTimersByTime(SILENCE - 1 + BASE / 2)
+		expect(sockets).toHaveLength(1)
+
+		vi.advanceTimersByTime(1)
+		expect(sockets.length).toBeGreaterThan(1)
+		expect(warnings.join(' ')).toContain('No traffic')
+		expect(client.status).toBe('connecting')
+	})
+
+	it('treats server pings and pongs as evidence of life', () => {
+		client.start()
+		const socket = connectAndHandshake()
+
+		// Each round trip stays inside the silence window, so the link is not reconnected.
+		for (let i = 0; i < 6; i += 1) {
+			vi.advanceTimersByTime(SILENCE - 1)
+			socket.emitPong()
+		}
+
+		expect(sockets).toHaveLength(1)
+		expect(client.status).toBe('live')
+	})
+
+	it('also watches a socket that opens but never completes a handshake', () => {
+		// Otherwise a device that accepts TCP but never says hello stays `connecting`
+		// until the process is restarted.
+		client.start()
+		lastSocket().triggerOpen()
+		expect(client.status).toBe('connecting')
+
+		vi.advanceTimersByTime(SILENCE + BASE / 2)
+		expect(sockets.length).toBeGreaterThan(1)
+	})
+
+	it('sends a probe ping while the link is healthy', () => {
+		client.start()
+		const socket = connectAndHandshake()
+
+		vi.advanceTimersByTime(INTERVAL)
+		expect(socket.pings).toBe(1)
+		vi.advanceTimersByTime(INTERVAL)
+		expect(socket.pings).toBe(2)
+	})
+
+	it('stops checking liveness once stopped', () => {
+		client.start()
+		connectAndHandshake()
+		client.stop()
+
+		const count = sockets.length
+		vi.advanceTimersByTime(SILENCE * 10)
+		expect(sockets).toHaveLength(count)
+	})
+
+	it('uses sensible defaults for the watchdog', () => {
+		expect(LIVENESS_INTERVAL_MS).toBe(5000)
+		// Three missed 5 s server pings, measured on firmware 1.1.2.24.
+		expect(SILENCE_TIMEOUT_MS).toBe(15000)
 	})
 })

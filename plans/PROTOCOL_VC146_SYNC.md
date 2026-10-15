@@ -29,7 +29,7 @@ unbuilt and one test-parity item is outstanding; §6.7 lists them.
 | Vendored spec + schema + conformance note              | done                                              |
 | Generated types + ajv conformance tests + drift CI job | done                                              |
 | WebSocket transport + reconnect                        | done (fixed-delay retry; backoff still open)      |
-| Silence watchdog                                       | **not built**, but no longer blocked — §11        |
+| Silence watchdog                                       | done — §5.3 (real link drop unverified)           |
 | Event-driven state, variables, feedbacks               | done                                              |
 | Actions mapped to vc146 commands                       | done (33 actions / 32 distinct commands)          |
 | Config, presets, README, HELP                          | done                                              |
@@ -229,10 +229,13 @@ feedback derives from `live`, not from `updateStatus`.
 - **Errors.** An `'error'` handler is always attached — an unhandled `ws` error
   would crash the module process. Errors mark the client disconnected and close the
   socket, and `close` drives reconnection.
-- **Reconnect.** Fixed 2 s delay, timer `unref()`ed so it cannot hold the process
-  open, guarded by a `stopped` flag so `stop()` is never followed by a reconnect.
-  **This is a simplification of the planned exponential backoff + jitter, and is
-  open work — §6.7.**
+- **Reconnect.** Exponential backoff with equal jitter: `1 s` base doubling to a
+  `30 s` ceiling (`reconnectDelayMs`), reset only by a completed `hello_event` —
+  so a device that accepts TCP but never handshakes also backs off. The timer is
+  `unref()`ed so it cannot hold the process open, and a `stopped` flag means
+  `stop()` is never followed by a reconnect. Jitter matters because a switch or
+  power event can take a whole rack down at once; without it every instance would
+  retry in lockstep.
 
 ### 5.4 Cost and behaviour inside Companion
 
@@ -328,17 +331,14 @@ Cross-checked mechanically: all 10 `actionId`s, 8 `feedbackId`s and 8
 
 ### 6.7 Remaining work
 
-1. **Reconnect backoff.** Replace the fixed 2 s retry with exponential backoff
-   1 s → 30 s plus jitter, reset on a successful `hello_event`, so a device that is
-   off is not retried every two seconds forever. Pure client change; no device
-   needed to validate.
-2. **Silence watchdog.** No traffic for ~15 s while nominally `live` should force a
-   reconnect, tracking the last frame of _any_ kind. Not built, but the blocking
-   question is now answered (§11): the device pings every 5.00 s exactly, and it
-   **auto-pongs a client-initiated `ws.ping()`**. Either signal therefore works, and
-   the client-initiated ping is the better one because it does not depend on server
-   behaviour. Note an idle timer legitimately pushes no events, so "no events" must
-   never be the signal.
+1. ~~**Reconnect backoff.**~~ **Done** — see §5.3. `reconnectDelayMs` is exported and
+   unit-tested; the client-level growth, cap and reset-on-handshake are tested on
+   fake timers in `client.test.ts`.
+2. ~~**Silence watchdog.**~~ **Done** — see §5.3. The link is watched for _any_
+   inbound frame (message, ping or pong, since the device pings every 5 s) and a
+   probe `ws.ping()` is sent each check, so an idle-but-healthy device is never
+   mistaken for a dead one. A silent link is torn down immediately rather than
+   waiting on a close handshake that a half-open socket will never complete.
 3. **Far-side integration fixtures.** Re-scoped after inspecting the far side:
    `test_ws_json_protocol.py` is **4,875 lines / 199 test functions / 27 groups** and
    is a **live-device suite** (`device_lease.py`, `host` argument, and a
@@ -441,7 +441,7 @@ generated union; only the action definitions were new.
 
 ## 8. Variables and feedbacks (as implemented)
 
-### Variables (19)
+### Variables (21)
 
 | Variable                                    | Source (vc146)                     | Notes                               |
 | ------------------------------------------- | ---------------------------------- | ----------------------------------- |
@@ -469,7 +469,7 @@ Still unexposed: `current_session_id`, `current_session_mode`, `progress_bar`,
 `program_elapsed_time` (+ formatted), `screen_version`/`screen_name`,
 `is_time_up_flashing`, `brightness`.
 
-### Feedbacks (14)
+### Feedbacks (15)
 
 | Feedback                                       | Source                                                      |
 | ---------------------------------------------- | ----------------------------------------------------------- |
@@ -542,16 +542,16 @@ of logic lived somewhere tests could not reach.
 
 ## 9. Risks / open questions — resolution status
 
-| #   | Risk                                             | Status                                                                                                                                                                                                                         |
-| --- | ------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| 1   | `add_session` while a session timer is running   | **Resolved on hardware.** Verified against firmware 1.1.2.24: accepted while a countdown ran, the session was appended, and the running timer and current session were untouched. See §11.                                     |
-| 2   | `entity_id` completeness                         | **Resolved for the implemented flow.** `add_session` fills it; the action falls back to `start_session` without an id, which acts on the current session — so a missing `entity_id` degrades rather than breaks.               |
-| 3   | `request_id` optionality                         | **Resolved.** Always sent; replies keyed by id; a reply without one is still surfaced to `onResponse` but resolves nothing.                                                                                                    |
-| 4   | Silence watchdog                                 | **Unblocked, still unbuilt.** Measured: the device pings every 5.00 s and auto-pongs a client `ws.ping()`, so either signal is usable. See §11 and §6.7 item 2.                                                                |
-| 5   | Field omission ("absent means absent, not null") | **Resolved.** Derivations use `?? default` throughout; nothing requires an optional field to be present.                                                                                                                       |
-| 6   | Unit split-brain                                 | **Fixed and now verified on hardware.** ToD `offset` is confirmed **milliseconds** (sent `3600000`, echoed `3600000`); `add_time`/`subtract_time` `ms` measured exact. Golden-fixture coverage still worthwhile (§6.7 item 3). |
-| 7   | Action id renames break existing buttons         | **Accepted (D6).** Nothing has shipped, so there are no existing deployments — see D6 for why no upgrade scripts are needed.                                                                                                   |
-| 8   | WS port availability                             | **Documented.** Firmware must expose `json_ws_port` (8081) and the network must allow it; a device advertising only `http_port` is not controllable.                                                                           |
+| #   | Risk                                             | Status                                                                                                                                                                                                                                   |
+| --- | ------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1   | `add_session` while a session timer is running   | **Resolved on hardware.** Verified against firmware 1.1.2.24: accepted while a countdown ran, the session was appended, and the running timer and current session were untouched. See §11.                                               |
+| 2   | `entity_id` completeness                         | **Resolved for the implemented flow.** `add_session` fills it; the action falls back to `start_session` without an id, which acts on the current session — so a missing `entity_id` degrades rather than breaks.                         |
+| 3   | `request_id` optionality                         | **Resolved.** Always sent; replies keyed by id; a reply without one is still surfaced to `onResponse` but resolves nothing.                                                                                                              |
+| 4   | Silence watchdog                                 | **Built and unit-tested** (§5.3): any inbound frame resets the clock, a probe ping is sent each check, silence beyond 15 s (three missed server pings) forces an immediate reconnect. Not yet verified against a real link drop — §10.2. |
+| 5   | Field omission ("absent means absent, not null") | **Resolved.** Derivations use `?? default` throughout; nothing requires an optional field to be present.                                                                                                                                 |
+| 6   | Unit split-brain                                 | **Fixed and now verified on hardware.** ToD `offset` is confirmed **milliseconds** (sent `3600000`, echoed `3600000`); `add_time`/`subtract_time` `ms` measured exact. Golden-fixture coverage still worthwhile (§6.7 item 3).           |
+| 7   | Action id renames break existing buttons         | **Accepted (D6).** Nothing has shipped, so there are no existing deployments — see D6 for why no upgrade scripts are needed.                                                                                                             |
+| 8   | WS port availability                             | **Documented.** Firmware must expose `json_ws_port` (8081) and the network must allow it; a device advertising only `http_port` is not controllable.                                                                                     |
 
 ---
 
@@ -570,14 +570,14 @@ requires hardware to be _correct_ — only to be _confirmed_.
 | 1   | Extract payload-building/validation out of the action callbacks into an exported pure module, with unit tests                                         | This is the root cause of the `ms`/`offset` bugs: `toWholeMs` and `parseToD()` lived where no test could reach them, so the suite was green and wrong                                                       | medium |
 | 2   | `checkIsFlashing` should OR `view.is_flashing` with `state.messagesFlashing`                                                                          | `messagesFlashing` is written by the store and read by nothing. §4.8 now states both sections report the _same_ message flash, so OR-ing cannot false-positive                                              | tiny   |
 | 3   | ToD guards, plus expose `current_session_mode`                                                                                                        | §11 confirmed a ToD session refuses `pause_session`/`add_time`/`subtract_time`/`reset_current_session`; today we send anyway and swallow the error at `warn`, so an operator's button silently does nothing | small  |
-| 4   | Reconnect backoff (1 s → 30 s + jitter, reset on hello)                                                                                               | Currently a fixed 2 s retry forever against a device that may be off                                                                                                                                        | small  |
-| 5   | Silence watchdog (client-initiated ping, reconnect when no pong)                                                                                      | §11 confirmed the device pings every 5.00 s **and** auto-pongs a client `ws.ping()`, so the self-contained form is viable. Needs a fake-socket test for the timeout logic                                   | medium |
+| 4   | Reconnect backoff (1 s → 30 s + jitter, reset on hello)                                                                                               | Replaces a fixed 2 s retry that ran forever against a device that may be off                                                                                                                                | small  | **done**    |
+| 5   | Silence watchdog (client-initiated ping, reconnect when quiet)                                                                                        | The device pings every 5.00 s and auto-pongs, so liveness is self-evident; silence now forces a reconnect instead of sitting on stale state                                                                 | medium | **done**    |
 | 6   | Offline golden payloads for every command the module sends                                                                                            | The CI-able half of fixture parity, and the only thing that catches _unit_ errors — schema validation cannot, since `offset: 3600` is a valid integer                                                       | small  |
-| 7   | Remaining pure variables: `progress_bar`, `program_elapsed_time` (+formatted), `screen_name`, `screen_version`, `brightness`, `is_time_up_flashing`   | `progress_bar` (0–100, countdown only) is arguably the most useful thing a stage display is not exposing                                                                                                    | small  |
+| 7   | Remaining pure variables: `program_elapsed_time` (+formatted), `screen_name`, `screen_version`, `brightness`, `is_time_up_flashing`                   | `progress_bar` was the valuable one and is **done** (variable + feedback); these are the leftovers                                                                                                          | small  | partly done |
 | 8   | Presets for the new surface (add/delete/reorder message, stored-message Show, brightness, reset, idle) + a single three-state blackout/glow indicator | The 20 presets still only cover the old surface; blackout and glow are mutually exclusive, so two independent buttons can display an impossible state                                                       | medium |
 | 9   | Optional surface: `update_message`, `delete_session`, `update_session`; a `progress_bar` advanced feedback                                            | The three commands were requested and are **done** (§7); the `progress_bar` feedback is still open                                                                                                          | medium | mostly done |
 
-**Items 1–3 have landed; 4–9 remain.** A status note on each of the three, then the
+**Items 1–5 have landed; 6–9 remain.** A status note on each of the three, then the
 detail:
 
 - **1 — done.** New module `src/payloads.ts` holds every payload builder as a pure
@@ -600,6 +600,25 @@ ToD guarding deliberately uses **positive knowledge only**: `isCurrentSessionTim
 returns `false` when the mode is unknown, so an action is never skipped merely because
 state has not arrived. Guarding on "no current session" would instead have silently
 disabled buttons for the window before hydration completes.
+
+- **4 — done.** `reconnectDelayMs(attempt, base, max, random)` is exported and
+  unit-tested (growth, ceiling, jitter band), and the client-level behaviour — delays
+  doubling per failure, the ceiling holding, and a completed handshake resetting the
+  counter — is tested on fake timers.
+- **5 — done.** The watchdog treats _any_ inbound frame as evidence of life (message,
+  ping or pong — the device pings every 5 s) and sends a probe `ws.ping()` on each
+  check, so an idle-but-healthy display is never mistaken for a dead one. "No events"
+  is deliberately not the signal: an idle display legitimately pushes nothing.
+
+One subtlety worth recording: a forced reconnect **detaches the socket before closing
+it**. On a half-open link `close()` waits for a handshake that will never arrive, so
+relying on it alone would leave the module on stale state for the length of that
+timeout. Detaching first makes the retry immediate, and the socket's own late `close`
+event is swallowed by the existing `this.ws !== ws` guards.
+
+The watchdog cannot see a socket that never _opens_ — its checks begin on open — so the
+default `ws` factory now passes `handshakeTimeout: 10000`, or a black-holed address
+would sit in `connecting` for the OS TCP timeout.
 
 ### 10.2 Needs the device
 

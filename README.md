@@ -72,6 +72,7 @@ Do not hand-edit `src/protocol/generated.ts`.
 - `current_session_number` — Current session number (1-based)
 - `total_sessions` — Total number of sessions in the program
 - `total_messages` — Total number of messages in the program
+- `progress_bar` — Remaining proportion of a countdown, 0–100 (countdown only)
 - `elapsed_formatted` — Formatted elapsed time (MM:SS or HH:MM:SS)
 - `remaining_formatted` — Formatted remaining time (MM:SS or HH:MM:SS)
 - `previous_session_name` — Name of the previous session
@@ -90,6 +91,7 @@ Do not hand-edit `src/protocol/generated.ts`.
 - `message_showing` — Message Is Showing
 - `is_time_up_display` — Time-is-Up Display Enabled
 - `is_time_up_flashing` — Time-is-Up Flash Active
+- `progress_bar` — Session Progress Bar; a colour strip showing the remaining proportion of a countdown
 
 ## Presets
 

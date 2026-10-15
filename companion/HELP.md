@@ -114,6 +114,7 @@ form, it needs no program loaded.
 - **current_session_number** — Current session number (1-based, e.g., 2 for the second session)
 - **total_sessions** — Total number of sessions in the program
 - **total_messages** — Total number of messages in the program
+- **progress_bar** — Remaining proportion of a **countdown**, 0–100 (100 at the start, 0 when it finishes). Count-up and Time of Day sessions always read 0.
 - **elapsed_formatted** — Formatted elapsed time (MM:SS or HH:MM:SS)
 - **remaining_formatted** — Formatted remaining time (MM:SS or HH:MM:SS)
 - **previous_session_name** — Name of the session before the current one
@@ -133,6 +134,7 @@ form, it needs no program loaded.
 - **Message Is Showing** — A message is on screen
 - **Time-is-Up Display Enabled** — The time-is-up overlay is enabled
 - **Time-is-Up Flash Active** — The time-is-up flash is running
+- **Session Progress Bar** — Draws the remaining proportion as a colour strip along the bottom or top edge of the button, optionally with the percentage as text. **The device only reports a progress percentage for a countdown session**, so on a count-up or Time of Day session the bar stays empty for the session's whole life — worth checking which sessions a button will be used during. The strip is a raw pixel buffer refreshed on each state event, so a thick bar costs more to draw than a thin one.
 
 ## Presets
 

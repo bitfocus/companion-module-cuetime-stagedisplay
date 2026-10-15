@@ -1,5 +1,6 @@
 import type { Config } from './main.ts'
 import type { ProtocolState } from './protocol/state.ts'
+import { clampPercent } from './progress.ts'
 
 // ---- Host/port resolution ----
 
@@ -61,6 +62,7 @@ export type VariableValues = {
 	current_session_number: number
 	total_sessions: number
 	total_messages: number
+	progress_bar: number
 	elapsed_formatted: string
 	remaining_formatted: string
 	previous_session_name: string
@@ -98,6 +100,7 @@ export function extractVariableValues(state: ProtocolState): VariableValues {
 		current_session_number: currentIndex >= 0 ? currentIndex + 1 : 0,
 		total_sessions: sessions.length,
 		total_messages: state.messageList.length,
+		progress_bar: progressPercent(state),
 		elapsed_formatted: formatTime(view?.elapsed_time ?? cc?.elapsed_time ?? 0),
 		remaining_formatted: formatTime(cc?.timer ?? 0),
 		previous_session_name: previous?.name ?? '',
@@ -168,6 +171,32 @@ export function isCurrentSessionTimeOfDay(state: ProtocolState): boolean {
 export function resolveMessageIdByPosition(state: ProtocolState, position: number): string | null {
 	if (!Number.isInteger(position) || position < 1 || position > state.messageList.length) return null
 	return state.messageList[position - 1]?.id ?? null
+}
+
+/**
+ * Remaining proportion of the current countdown, `0`–`100`.
+ *
+ * vc146 reports this as `view.progress_bar`, defined as `remaining / duration × 100`,
+ * so `100` is a full bar at the session's start and `0` means the countdown reached
+ * zero. **Only a countdown session ever reports anything but `0`** — a count-up or
+ * Time of Day session reads `0` for its whole life, which is worth knowing before
+ * putting a bar on a button used during one of those.
+ */
+export function progressPercent(state: ProtocolState): number {
+	return clampPercent(state.view?.progress_bar ?? 0)
+}
+
+/**
+ * Whether the device's `progress_bar` value carries meaning for the current session.
+ *
+ * Used to distinguish "the countdown has finished" from "this session type has no
+ * progress at all" — the percentage alone cannot tell them apart, since both read `0`.
+ * Unknown state returns `true` so the bar is not suppressed merely because the state
+ * has not arrived yet.
+ */
+export function progressIsMeaningful(state: ProtocolState): boolean {
+	const mode = currentSessionMode(state)
+	return mode === null || mode === 'countdown'
 }
 
 // ---- Boolean feedback logic ----
