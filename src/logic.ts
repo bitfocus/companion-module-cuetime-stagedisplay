@@ -134,6 +134,29 @@ export function sessionPosition(state: ProtocolState, sessionId: string): number
 }
 
 /**
+ * Maps a 1-based position in the program to a session id.
+ *
+ * Session summaries do carry an `index`, but taking it from list order keeps this
+ * consistent with `resolveMessageIdByPosition` and avoids trusting a field the device
+ * could renumber.
+ */
+export function resolveSessionIdByPosition(state: ProtocolState, position: number): string | null {
+	if (!Number.isInteger(position) || position < 1 || position > state.sessionList.length) return null
+	return state.sessionList[position - 1]?.id ?? null
+}
+
+/** Id of the first session in program order, or `null` when the program is empty. */
+export function firstSessionId(state: ProtocolState): string | null {
+	return resolveSessionIdByPosition(state, 1)
+}
+
+/** True when the device has no current session — the timer is idle. */
+export function isIdle(state: ProtocolState): boolean {
+	// `current_session_index` is -1 when nothing is current (and absent before hydration).
+	return (state.controlCenter?.current_session_index ?? -1) < 0
+}
+
+/**
  * Mode of the session the device reports as current, or `null` when nothing is
  * current.
  *

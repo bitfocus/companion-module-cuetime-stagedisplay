@@ -13,7 +13,15 @@
 
 import type { CommandPayloads } from './protocol/generated.ts'
 import type { ProtocolState } from './protocol/state.ts'
-import { checkIsPlaying, resolveMessageIdByPosition, resolveSessionId, sessionPosition } from './logic.ts'
+import {
+	checkIsPlaying,
+	firstSessionId,
+	isIdle,
+	resolveMessageIdByPosition,
+	resolveSessionId,
+	resolveSessionIdByPosition,
+	sessionPosition,
+} from './logic.ts'
 
 /**
  * A payload ready to send, or why nothing should be sent.
@@ -293,6 +301,83 @@ export function buildUpdateMessage(
 	}
 
 	return { ok: true, payload: { message_id: messageId, content: text } }
+}
+
+/** `show_session`, addressed by 1-based position in program order. */
+export function buildShowSession(state: ProtocolState, position: unknown): Built<{ session_id: string }> {
+	const index = Number(position ?? 0)
+	const sessionId = resolveSessionIdByPosition(state, index)
+	if (!sessionId) {
+		return {
+			ok: false,
+			kind: 'invalid',
+			reason: `no session at position ${index} (the program has ${state.sessionList.length})`,
+		}
+	}
+	return { ok: true, payload: { session_id: sessionId } }
+}
+
+/**
+ * `start_session`, which has to be told what to start when nothing is current.
+ *
+ * Bare `start_session` acts on the current session, and vc146 rejects it outright when
+ * there is none — `INVALID_COMMAND`, "No active session to start". Naming the first
+ * session instead makes one command load *and* start it, which is what a Play button
+ * should do from an idle display. Verified on firmware 1.1.2.27: idle -> running in a
+ * single command.
+ */
+export function buildStartSession(state: ProtocolState): Built<CommandPayloads['start_session']> {
+	if (!isIdle(state)) return { ok: true, payload: {} }
+
+	const first = firstSessionId(state)
+	if (!first) {
+		return { ok: false, kind: 'noop', reason: 'there is no program loaded, so there is nothing to start' }
+	}
+	return { ok: true, payload: { session_id: first } }
+}
+
+export type NavDirection = 'next' | 'previous'
+
+/**
+ * What a forward/back button should actually send.
+ *
+ * `navigate_next_session` / `navigate_previous_session` are rejected when there is no
+ * current session — the device explicitly has no fallback to the first session — so an
+ * idle display needs `show_session` instead. Both directions select the *first* session
+ * from idle: there is nothing before the start of a program, and a dead button is worse
+ * than a predictable one.
+ *
+ * The device leaves a navigated session **paused**; starting it is a separate
+ * `start_session`.
+ */
+export type NavigationPlan =
+	| { ok: true; command: 'navigate'; direction: NavDirection }
+	| { ok: true; command: 'show_session'; sessionId: string }
+	| { ok: false; kind: 'noop'; reason: string }
+
+export function planNavigation(state: ProtocolState, direction: NavDirection): NavigationPlan {
+	if (isIdle(state)) {
+		const first = firstSessionId(state)
+		if (!first) {
+			return { ok: false, kind: 'noop', reason: 'there is no program loaded, so there is nothing to navigate' }
+		}
+		return { ok: true, command: 'show_session', sessionId: first }
+	}
+
+	const available =
+		direction === 'next'
+			? state.controlCenter?.is_next_session === true
+			: state.controlCenter?.is_previous_session === true
+
+	if (!available) {
+		return {
+			ok: false,
+			kind: 'noop',
+			reason: direction === 'next' ? 'already at the last session' : 'already at the first session',
+		}
+	}
+
+	return { ok: true, command: 'navigate', direction }
 }
 
 /**

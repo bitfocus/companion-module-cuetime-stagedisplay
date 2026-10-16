@@ -9,10 +9,13 @@ import {
 	buildMessageMove,
 	buildSessionMove,
 	buildShowMessage,
+	buildShowSession,
+	buildStartSession,
 	buildTimeDelta,
 	buildUpdateMessage,
 	buildUpdateSession,
 	isMessageShowing,
+	planNavigation,
 } from './payloads.ts'
 import { isCurrentSessionTimeOfDay } from './logic.ts'
 
@@ -47,17 +50,33 @@ export function UpdateActions(self: ModuleInstance): void {
 			name: 'Navigate to Next Session',
 			options: [],
 			callback: async () => {
-				// The device reports whether navigation is actually available.
-				if (self.state.controlCenter?.is_next_session !== true) return
-				await self.sendCommand('navigate_next_session')
+				// `navigate_*` needs a current session; from idle this selects the first one.
+				const plan = planNavigation(self.state, 'next')
+				if (!plan.ok) {
+					self.log('debug', `Navigate next: ${plan.reason}; nothing sent`)
+					return
+				}
+				if (plan.command === 'show_session') {
+					self.sendCommand('show_session', { session_id: plan.sessionId })
+					return
+				}
+				self.sendCommand('navigate_next_session')
 			},
 		},
 		navigate_previous_session: {
 			name: 'Navigate to Previous Session',
 			options: [],
 			callback: async () => {
-				if (self.state.controlCenter?.is_previous_session !== true) return
-				await self.sendCommand('navigate_previous_session')
+				const plan = planNavigation(self.state, 'previous')
+				if (!plan.ok) {
+					self.log('debug', `Navigate previous: ${plan.reason}; nothing sent`)
+					return
+				}
+				if (plan.command === 'show_session') {
+					self.sendCommand('show_session', { session_id: plan.sessionId })
+					return
+				}
+				self.sendCommand('navigate_previous_session')
 			},
 		},
 		toggle_playback: {
@@ -67,9 +86,9 @@ export function UpdateActions(self: ModuleInstance): void {
 				if (skipForTimeOfDay(self, 'Toggle playback')) return
 				// `timer_run_state` distinguishes paused from idle, which `is_playing` could not.
 				if (self.state.controlCenter?.timer_run_state === 'running') {
-					await self.sendCommand('pause_session')
+					self.sendCommand('pause_session')
 				} else {
-					await self.sendCommand('start_session')
+					self.sendCommand('start_session')
 				}
 			},
 		},
@@ -77,7 +96,13 @@ export function UpdateActions(self: ModuleInstance): void {
 			name: 'Start / Resume Session',
 			options: [],
 			callback: async () => {
-				await self.sendCommand('start_session')
+				// From idle this names the first session, so Play actually starts the show.
+				const built = buildStartSession(self.state)
+				if (!built.ok) {
+					self.log('debug', `Start session: ${built.reason}; nothing sent`)
+					return
+				}
+				self.sendCommand('start_session', built.payload)
 			},
 		},
 		pause_session: {
@@ -85,7 +110,7 @@ export function UpdateActions(self: ModuleInstance): void {
 			options: [],
 			callback: async () => {
 				if (skipForTimeOfDay(self, 'Pause session')) return
-				await self.sendCommand('pause_session')
+				self.sendCommand('pause_session')
 			},
 		},
 		reset_current_session: {
@@ -93,14 +118,14 @@ export function UpdateActions(self: ModuleInstance): void {
 			options: [],
 			callback: async () => {
 				if (skipForTimeOfDay(self, 'Reset current session')) return
-				await self.sendCommand('reset_current_session')
+				self.sendCommand('reset_current_session')
 			},
 		},
 		reset_program_elapsed_timer: {
 			name: 'Reset Program Elapsed Timer',
 			options: [],
 			callback: async () => {
-				await self.sendCommand('reset_program_elapsed_timer')
+				self.sendCommand('reset_program_elapsed_timer')
 			},
 		},
 		add_time: {
@@ -122,7 +147,7 @@ export function UpdateActions(self: ModuleInstance): void {
 					self.log('warn', `Add time: ${built.reason}; nothing sent`)
 					return
 				}
-				await self.sendCommand('add_time', built.payload)
+				self.sendCommand('add_time', built.payload)
 			},
 		},
 		subtract_time: {
@@ -144,7 +169,7 @@ export function UpdateActions(self: ModuleInstance): void {
 					self.log('warn', `Subtract time: ${built.reason}; nothing sent`)
 					return
 				}
-				await self.sendCommand('subtract_time', built.payload)
+				self.sendCommand('subtract_time', built.payload)
 			},
 		},
 		add_session: {
@@ -233,36 +258,41 @@ export function UpdateActions(self: ModuleInstance): void {
 					return
 				}
 
-				const result = await self.sendCommandDetailed('add_session', built.payload)
-				if (!result.ok) {
-					self.log('warn', `Add session failed: ${result.code ?? 'error'}`)
-					return
-				}
+				void self.sendCommandDetailed('add_session', built.payload).then((result) => {
+					if (!result.ok) {
+						self.log('warn', `Add session failed: ${result.code ?? 'error'}`)
+						return
+					}
 
-				if (event.options.start !== true) return
+					if (event.options.start !== true) return
 
-				// `add_session` replies with the new session id on `entity_id`.
-				const sessionId = result.response?.type === 'ack_response' ? (result.response.entity_id ?? null) : null
-				await self.sendCommand('start_session', sessionId ? { session_id: sessionId } : {})
+					// `add_session` replies with the new session id on `entity_id`.
+					const sessionId = result.response?.type === 'ack_response' ? (result.response.entity_id ?? null) : null
+					self.sendCommand('start_session', sessionId ? { session_id: sessionId } : {})
+				})
 			},
 		},
 		show_session: {
-			name: 'Show Session by ID',
+			name: 'Show Session',
 			options: [
 				{
-					type: 'textinput',
-					id: 'session_id',
-					label: 'Session ID',
-					default: '',
+					type: 'number',
+					id: 'session_number',
+					label: 'Session number (1 = first)',
+					default: 1,
+					min: 1,
+					max: 999,
+					tooltip:
+						'Selects a session by its position in the program. This is the only way in: start and navigate need a current session, and the device has no fallback to the first.',
 				},
 			],
 			callback: async (event: ActionEvent) => {
-				const sessionId = String(event.options.session_id ?? '').trim()
-				if (!sessionId) {
-					self.log('warn', 'Show session: a session id is required; nothing sent')
+				const built = buildShowSession(self.state, event.options.session_number)
+				if (!built.ok) {
+					self.log('warn', `Show session: ${built.reason}; nothing sent`)
 					return
 				}
-				await self.sendCommand('show_session', { session_id: sessionId })
+				self.sendCommand('show_session', built.payload)
 			},
 		},
 		move_session_up: {
@@ -281,7 +311,7 @@ export function UpdateActions(self: ModuleInstance): void {
 					self.log(built.kind === 'noop' ? 'debug' : 'warn', `Move session up: ${built.reason}; nothing sent`)
 					return
 				}
-				await self.sendCommand('move_session_up', built.payload)
+				self.sendCommand('move_session_up', built.payload)
 			},
 		},
 		move_session_down: {
@@ -300,7 +330,7 @@ export function UpdateActions(self: ModuleInstance): void {
 					self.log(built.kind === 'noop' ? 'debug' : 'warn', `Move session down: ${built.reason}; nothing sent`)
 					return
 				}
-				await self.sendCommand('move_session_down', built.payload)
+				self.sendCommand('move_session_down', built.payload)
 			},
 		},
 		delete_session: {
@@ -320,7 +350,7 @@ export function UpdateActions(self: ModuleInstance): void {
 					return
 				}
 				// Deleting a paused/idle *current* session also returns the display to idle.
-				await self.sendCommand('delete_session', built.payload)
+				self.sendCommand('delete_session', built.payload)
 			},
 		},
 		update_session: {
@@ -409,17 +439,18 @@ export function UpdateActions(self: ModuleInstance): void {
 					return
 				}
 
-				const result = await self.sendCommandDetailed('update_session', built.payload)
-				if (!result.ok) {
-					self.log('warn', `Update session failed: ${result.code ?? 'error'} — ${result.message ?? ''}`)
-					return
-				}
+				void self.sendCommandDetailed('update_session', built.payload).then((result) => {
+					if (!result.ok) {
+						self.log('warn', `Update session failed: ${result.code ?? 'error'} — ${result.message ?? ''}`)
+						return
+					}
 
-				// Editing the current session re-arms it, discarding any paused position. The
-				// device says so in the ack message, and vc146 expects the integrator to pass
-				// that on because the API has no dialog to confirm in.
-				const message = result.response?.type === 'ack_response' ? result.response.message : null
-				self.log('info', `Session updated${message ? ` — ${message}` : ''}`)
+					// Editing the current session re-arms it, discarding any paused position. The
+					// device says so in the ack message, and vc146 expects the integrator to pass
+					// that on because the API has no dialog to confirm in.
+					const message = result.response?.type === 'ack_response' ? result.response.message : null
+					self.log('info', `Session updated${message ? ` — ${message}` : ''}`)
+				})
 			},
 		},
 		add_message: {
@@ -439,16 +470,17 @@ export function UpdateActions(self: ModuleInstance): void {
 					return
 				}
 
-				const result = await self.sendCommandDetailed('add_message', built.payload)
-				if (!result.ok) {
-					self.log('warn', `Add message failed: ${result.code ?? 'error'}`)
-					return
-				}
+				void self.sendCommandDetailed('add_message', built.payload).then((result) => {
+					if (!result.ok) {
+						self.log('warn', `Add message failed: ${result.code ?? 'error'}`)
+						return
+					}
 
-				// The device reports the new id on `entity_id`; log it so the new message
-				// can be addressed by position once the list refreshes.
-				const messageId = result.response?.type === 'ack_response' ? (result.response.entity_id ?? null) : null
-				self.log('info', `Added message${messageId ? ` ${messageId}` : ''}`)
+					// The device reports the new id on `entity_id`; log it so the new message
+					// can be addressed by position once the list refreshes.
+					const messageId = result.response?.type === 'ack_response' ? (result.response.entity_id ?? null) : null
+					self.log('info', `Added message${messageId ? ` ${messageId}` : ''}`)
+				})
 			},
 		},
 		delete_message: {
@@ -470,7 +502,7 @@ export function UpdateActions(self: ModuleInstance): void {
 					return
 				}
 				// The device refuses this with DEVICE_BUSY while the message is on screen.
-				await self.sendCommand('delete_message', built.payload)
+				self.sendCommand('delete_message', built.payload)
 			},
 		},
 		move_message_up: {
@@ -491,7 +523,7 @@ export function UpdateActions(self: ModuleInstance): void {
 					self.log(built.kind === 'noop' ? 'debug' : 'warn', `Move message up: ${built.reason}; nothing sent`)
 					return
 				}
-				await self.sendCommand('move_message_up', built.payload)
+				self.sendCommand('move_message_up', built.payload)
 			},
 		},
 		move_message_down: {
@@ -512,7 +544,7 @@ export function UpdateActions(self: ModuleInstance): void {
 					self.log(built.kind === 'noop' ? 'debug' : 'warn', `Move message down: ${built.reason}; nothing sent`)
 					return
 				}
-				await self.sendCommand('move_message_down', built.payload)
+				self.sendCommand('move_message_down', built.payload)
 			},
 		},
 		update_message: {
@@ -539,7 +571,7 @@ export function UpdateActions(self: ModuleInstance): void {
 					self.log('warn', `Update message: ${built.reason}; nothing sent`)
 					return
 				}
-				await self.sendCommand('update_message', built.payload)
+				self.sendCommand('update_message', built.payload)
 			},
 		},
 		blackout: {
@@ -563,7 +595,7 @@ export function UpdateActions(self: ModuleInstance): void {
 				const enabled =
 					action === 'enable' ? true : action === 'disable' ? false : !(self.state.controlCenter?.is_blackout ?? false)
 
-				await self.sendCommand('set_blackout', { action: enabled ? 'enable' : 'disable' })
+				self.sendCommand('set_blackout', { action: enabled ? 'enable' : 'disable' })
 			},
 		},
 		set_glow: {
@@ -581,14 +613,14 @@ export function UpdateActions(self: ModuleInstance): void {
 				},
 			],
 			callback: async (event: ActionEvent) => {
-				await self.sendCommand('set_glow', { enabled: event.options.enabled === 'true' })
+				self.sendCommand('set_glow', { enabled: event.options.enabled === 'true' })
 			},
 		},
 		toggle_glow: {
 			name: 'Toggle Glow',
 			options: [],
 			callback: async () => {
-				await self.sendCommand('toggle_glow')
+				self.sendCommand('toggle_glow')
 			},
 		},
 		set_flash: {
@@ -607,14 +639,14 @@ export function UpdateActions(self: ModuleInstance): void {
 				},
 			],
 			callback: async (event: ActionEvent) => {
-				await self.sendCommand('set_flash', { action: String(event.options.action ?? 'enable') })
+				self.sendCommand('set_flash', { action: String(event.options.action ?? 'enable') })
 			},
 		},
 		toggle_flash: {
 			name: 'Toggle Flash',
 			options: [],
 			callback: async () => {
-				await self.sendCommand('toggle_flash')
+				self.sendCommand('toggle_flash')
 			},
 		},
 		show_message: {
@@ -666,25 +698,25 @@ export function UpdateActions(self: ModuleInstance): void {
 				// Compare against the specific message rather than "any message is showing",
 				// so a second button for a different message is not swallowed by the first.
 				if (isMessageShowing(self.state, built.payload)) {
-					await self.sendCommand('hide_message')
+					self.sendCommand('hide_message')
 					return
 				}
 
-				await self.sendCommand('show_message', built.payload)
+				self.sendCommand('show_message', built.payload)
 			},
 		},
 		hide_message: {
 			name: 'Hide Message',
 			options: [],
 			callback: async () => {
-				await self.sendCommand('hide_message')
+				self.sendCommand('hide_message')
 			},
 		},
 		show_idle: {
 			name: 'Show Idle Screen',
 			options: [],
 			callback: async () => {
-				await self.sendCommand('show_idle')
+				self.sendCommand('show_idle')
 			},
 		},
 		set_brightness: {
@@ -705,7 +737,7 @@ export function UpdateActions(self: ModuleInstance): void {
 					self.log('warn', `Set brightness: ${built.reason}; nothing sent`)
 					return
 				}
-				await self.sendCommand('set_brightness', built.payload)
+				self.sendCommand('set_brightness', built.payload)
 			},
 		},
 		set_is_time_up_display: {
@@ -723,14 +755,14 @@ export function UpdateActions(self: ModuleInstance): void {
 				},
 			],
 			callback: async (event: ActionEvent) => {
-				await self.sendCommand('set_is_time_up_display', { enabled: event.options.enabled === 'true' })
+				self.sendCommand('set_is_time_up_display', { enabled: event.options.enabled === 'true' })
 			},
 		},
 		toggle_is_time_up_display: {
 			name: 'Toggle Time-is-Up Display',
 			options: [],
 			callback: async () => {
-				await self.sendCommand('toggle_is_time_up_display')
+				self.sendCommand('toggle_is_time_up_display')
 			},
 		},
 		delete_all_messages: {
@@ -748,7 +780,7 @@ export function UpdateActions(self: ModuleInstance): void {
 					self.log('warn', 'Delete all messages: not confirmed; nothing sent')
 					return
 				}
-				await self.sendCommand('delete_all_messages')
+				self.sendCommand('delete_all_messages')
 			},
 		},
 		delete_all_sessions: {
@@ -766,7 +798,7 @@ export function UpdateActions(self: ModuleInstance): void {
 					self.log('warn', 'Delete all sessions: not confirmed; nothing sent')
 					return
 				}
-				await self.sendCommand('delete_all_sessions')
+				self.sendCommand('delete_all_sessions')
 			},
 		},
 	})

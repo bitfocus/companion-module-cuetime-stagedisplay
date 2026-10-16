@@ -12,6 +12,9 @@ import {
 	buildMessageMove,
 	buildSessionMove,
 	buildShowMessage,
+	buildShowSession,
+	buildStartSession,
+	planNavigation,
 	buildTimeDelta,
 	buildUpdateMessage,
 	buildUpdateSession,
@@ -528,5 +531,92 @@ describe('buildSessionMove', () => {
 		// and last, making every move a legitimate no-op).
 		const idleButKnown = stateFrom(helloEvent(), sessionsEvent([{ id: 'a' }, { id: 'only' }]))
 		expect(buildSessionMove(idleButKnown, 'only', 'up')).toEqual({ ok: true, payload: { session_id: 'only' } })
+	})
+})
+
+describe('entering the program from idle', () => {
+	// Idle: a program is loaded but nothing is current (current_session_index -1).
+	const idleWithProgram = stateFrom(
+		sessionsEvent([
+			{ id: 's1', index: 0, name: 'One', mode: 'countdown' },
+			{ id: 's2', index: 1, name: 'Two', mode: 'countup' },
+		]),
+		controlCenterEvent({ current_session_index: -1, current_session_id: '' }),
+	)
+	// Same program, with the first session selected.
+	const onFirst = stateFrom(
+		sessionsEvent([
+			{ id: 's1', index: 0, name: 'One', mode: 'countdown', is_current: true },
+			{ id: 's2', index: 1, name: 'Two', mode: 'countup' },
+		]),
+		controlCenterEvent({ current_session_index: 0, current_session_id: 's1', is_next_session: true }),
+	)
+
+	it('starts the first session from idle, since bare start_session is rejected', () => {
+		// Verified on firmware 1.1.2.27: naming the first session takes idle -> running
+		// in one command, whereas bare start_session is INVALID_COMMAND ("No active
+		// session to start").
+		expect(buildStartSession(idleWithProgram)).toEqual({ ok: true, payload: { session_id: 's1' } })
+	})
+
+	it('sends a plain start when a session is already current (resume)', () => {
+		expect(buildStartSession(onFirst)).toEqual({ ok: true, payload: {} })
+	})
+
+	it('reports nothing to start when the program is empty', () => {
+		const built = buildStartSession(createInitialState())
+		expect(built.ok).toBe(false)
+		if (!built.ok) expect(built.reason).toContain('no program')
+	})
+
+	it('navigates normally once a session is current', () => {
+		expect(planNavigation(onFirst, 'next')).toEqual({ ok: true, command: 'navigate', direction: 'next' })
+	})
+
+	it('selects the first session from idle instead of a rejected navigate', () => {
+		// The device has no fallback to the first session, so navigating from idle is
+		// INVALID_COMMAND ("No next session available") — we substitute show_session.
+		expect(planNavigation(idleWithProgram, 'next')).toEqual({
+			ok: true,
+			command: 'show_session',
+			sessionId: 's1',
+		})
+		// Both directions: there is nothing before the start of a program, and a dead
+		// button is worse than a predictable one.
+		expect(planNavigation(idleWithProgram, 'previous')).toEqual({
+			ok: true,
+			command: 'show_session',
+			sessionId: 's1',
+		})
+	})
+
+	it('reports why navigating is a no-op rather than silently doing nothing', () => {
+		const atLast = stateFrom(
+			sessionsEvent([
+				{ id: 's1', index: 0, name: 'One', is_current: true },
+				{ id: 's2', index: 1, name: 'Two' },
+			]),
+			controlCenterEvent({ current_session_index: 1, is_next_session: false, is_previous_session: true }),
+		)
+		const next = planNavigation(atLast, 'next')
+		expect(next.ok).toBe(false)
+		if (!next.ok) expect(next.reason).toContain('last')
+
+		const atFirst = planNavigation(onFirst, 'previous')
+		expect(atFirst.ok).toBe(false)
+		if (!atFirst.ok) expect(atFirst.reason).toContain('first')
+
+		const noProgram = planNavigation(createInitialState(), 'next')
+		expect(noProgram.ok).toBe(false)
+		if (!noProgram.ok) expect(noProgram.reason).toContain('no program')
+	})
+
+	it('shows a session by position, so no id has to be known', () => {
+		expect(buildShowSession(idleWithProgram, 1)).toEqual({ ok: true, payload: { session_id: 's1' } })
+		expect(buildShowSession(idleWithProgram, 2)).toEqual({ ok: true, payload: { session_id: 's2' } })
+		const outOfRange = buildShowSession(idleWithProgram, 3)
+		expect(outOfRange.ok).toBe(false)
+		if (!outOfRange.ok) expect(outOfRange.reason).toContain('has 2')
+		expect(buildShowSession(idleWithProgram, 0).ok).toBe(false)
 	})
 })
