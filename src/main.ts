@@ -18,6 +18,12 @@ import { applyEvent, applyResponse, createInitialState } from './protocol/state.
 import type { ProtocolState } from './protocol/state.ts'
 import type { CommandPayloads, CommandType } from './protocol/generated.ts'
 
+/**
+ * Re-exported so Companion finds the upgrade scripts on the module entrypoint.
+ * It reads them from here — nothing in `@companion-module/base` references the name.
+ */
+export { UpgradeScripts } from './upgrades.ts'
+
 export interface Config extends JsonObject {
 	host: string
 	port: string
@@ -35,8 +41,8 @@ export interface ModuleInstance extends InstanceBase<ModuleInstanceTypes> {
 	/** Latest state assembled from pushed events; the single source for feedbacks/variables. */
 	state: ProtocolState
 	connected: boolean
-	/** Sends a command, returning whether the device accepted it. */
-	sendCommand<K extends CommandType>(type: K, payload?: CommandPayloads[K]): Promise<boolean>
+	/** Dispatches a command without waiting for the reply; the outcome is logged later. */
+	sendCommand<K extends CommandType>(type: K, payload?: CommandPayloads[K]): void
 	/** Sends a command and hands back the full reply, for actions that need its payload. */
 	sendCommandDetailed<K extends CommandType>(type: K, payload?: CommandPayloads[K]): Promise<ResponseResult>
 	updateActions(): void
@@ -147,6 +153,15 @@ class ModuleInstanceImpl extends InstanceBase<ModuleInstanceTypes> implements Mo
 		this.checkFeedbacks(...FEEDBACK_IDS)
 	}
 
+	/**
+	 * Sends a command and hands back the full reply, for the rare flow that needs its
+	 * payload (reading `entity_id` from an ack, for instance).
+	 *
+	 * **Do not await this inside an action callback** unless the reply is genuinely
+	 * required: Companion runs callbacks under its own timeout, so waiting on a device
+	 * that is slow (or unwell) makes Companion report the action as failed even though
+	 * the command was delivered. See `sendCommand`.
+	 */
 	async sendCommandDetailed<K extends CommandType>(
 		type: K,
 		payload: CommandPayloads[K] = {} as CommandPayloads[K],
@@ -172,20 +187,28 @@ class ModuleInstanceImpl extends InstanceBase<ModuleInstanceTypes> implements Mo
 		}
 	}
 
-	async sendCommand<K extends CommandType>(
-		type: K,
-		payload: CommandPayloads[K] = {} as CommandPayloads[K],
-	): Promise<boolean> {
-		const result = await this.sendCommandDetailed(type, payload)
-
-		if (!result.ok) {
-			const detail = [result.code, result.message].filter(Boolean).join(' — ')
-			this.log('warn', `CueTime rejected '${type}'${detail ? `: ${detail}` : ''}`)
-			return false
-		}
-
-		this.log('debug', `Sent '${type}'`)
-		return true
+	/**
+	 * Dispatches a command **without waiting for the reply**.
+	 *
+	 * Companion runs an action callback under its own timeout, and a reply can take as
+	 * long as the request timeout — or never arrive, if the device is unwell. Awaiting
+	 * the reply here made Companion fail actions that had actually been delivered, which
+	 * is what `Error executing action: Error: Call timed out` in the Companion log was.
+	 *
+	 * The outcome is reported when it arrives instead, so a rejection is still visible
+	 * without holding up the callback.
+	 */
+	sendCommand<K extends CommandType>(type: K, payload: CommandPayloads[K] = {} as CommandPayloads[K]): void {
+		void this.sendCommandDetailed(type, payload).then(
+			(result) => {
+				if (result.ok) return
+				const detail = [result.code, result.message].filter(Boolean).join(' — ')
+				this.log('warn', `CueTime rejected '${type}'${detail ? `: ${detail}` : ''}`)
+			},
+			(error: unknown) => {
+				this.log('error', `Failed to send '${type}': ${error instanceof Error ? error.message : String(error)}`)
+			},
+		)
 	}
 
 	private resolveHost(): string {

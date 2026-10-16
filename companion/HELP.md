@@ -34,14 +34,24 @@ If mDNS is unavailable, enter the device's IP address and port (default: 8081).
 
 ### Navigation
 
-- **Navigate to Next Session** — Move to the next session. Does nothing when the device reports there is no next session.
-- **Navigate to Previous Session** — Move to the previous session. Does nothing when the device reports there is no previous session.
-- **Show Session by ID** — Jump straight to a session by its id.
+- **Navigate to Next Session** — Move to the next session. From an **idle** display this selects the first session instead, because the device rejects navigation when nothing is current and has no fallback to the first. Does nothing (with a debug log) at the last session.
+- **Navigate to Previous Session** — Move to the previous session. From an **idle** display this also selects the first, since there is nothing before the start of a program.
+- **Show Session** — Select a session by its **position** in the program (1 = first). This is the only way into a program from idle, and needs no ids.
 
 ### Playback
 
 - **Toggle Playback** — Pauses a running timer, starts a paused or idle one. Uses the device's reported `timer_run_state`, so a paused timer resumes rather than being treated as idle.
-- **Start / Resume Session** — Start or resume the current session's timer.
+- **Start / Resume Session** — Start or resume the current session's timer. From an **idle** display this starts the **first** session, so Play works without selecting anything first.
+
+A note on idle: `start_session` and `navigate_*` are both rejected when no session is
+current ("No active session to start", "No next session available"), and the device is
+explicit that it has no fallback to the first session. The module handles this for you
+as described above — it either names the first session or selects it first — so the
+buttons work from idle without any extra setup.
+
+Also note the device leaves a **navigated** session paused, so after moving to the next
+session you still need Play to start its timer.
+
 - **Pause Session** — Pause the current session's timer.
 - **Reset Current Session** — Return the current session to its configured start value and leave it paused.
 - **Reset Program Elapsed Timer** — Reset the program's elapsed counter.

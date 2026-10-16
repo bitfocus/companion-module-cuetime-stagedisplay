@@ -27,11 +27,11 @@ Do not hand-edit `src/protocol/generated.ts`.
 
 ## Actions
 
-- `navigate_next_session` — Navigate to next session
-- `navigate_previous_session` — Navigate to previous session
-- `show_session` — Jump to a session by id
+- `navigate_next_session` — Navigate to next session; from idle it selects the first session
+- `navigate_previous_session` — Navigate to previous session; from idle it also selects the first
+- `show_session` — Select a session by position in the program (1 = first); the only way in from idle
 - `toggle_playback` — Toggle between play and pause based on the device's reported run state
-- `start_session` — Start or resume the current session
+- `start_session` — Start or resume the current session; from idle it starts the first session
 - `pause_session` — Pause the current session
 - `reset_current_session` — Return the current session to its configured start value, paused
 - `reset_program_elapsed_timer` — Reset the program elapsed counter

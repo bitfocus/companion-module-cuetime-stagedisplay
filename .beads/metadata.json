@@ -1,0 +1,7 @@
+{
+  "database": "dolt",
+  "backend": "dolt",
+  "dolt_mode": "embedded",
+  "dolt_database": "companion_module_cuetime_stagedisplay",
+  "project_id": "59d0a1e0-6f59-4818-b46d-0002fdaebe80"
+}
