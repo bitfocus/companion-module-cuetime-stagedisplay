@@ -69,5 +69,3 @@ byte-identical), re-run `yarn generate-protocol`, and commit the result.
 - [ ] Integration: manual pass against a vc146 device.
 - [ ] Parity: far-side `integration_tests/test_ws_json_protocol.py` run against
       the same device.
-
-See `plans/PROTOCOL_VC146_SYNC.md` for the remaining work list.

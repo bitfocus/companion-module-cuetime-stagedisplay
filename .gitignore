@@ -32,3 +32,6 @@ yarn-error.log
 .beads-credential-key
 .beads/proxieddb/
 *.gate.lock*
+
+# Local scratch/planning docs — kept on disk, never tracked
+plans/
