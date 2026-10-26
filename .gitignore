@@ -18,20 +18,16 @@ yarn-error.log
 
 
 
-# Beads (bd) tooling — local only, never tracked in this repo
-.beads/
-.agents/skills/beads/
-.cursor/rules/beads.mdc
-.cursor/hooks.json
-.codex/config.toml
-.codex/hooks.json
-
-# Beads / Dolt runtime files
+# Beads (bd) tooling, agent hooks and Dolt runtime — local only, never tracked in this repo.
+# `.beads*` catches .beads/, .beads-credential-key, .beads.gate.lock, backups, etc.
+.beads*
+.beads-credential-key
 .dolt/
 *.db
-.beads-credential-key
-.beads/proxieddb/
 *.gate.lock*
+.agents/skills/beads/
+.codex/
+.cursor/
 
 # Local scratch/planning docs — kept on disk, never tracked
 plans/
