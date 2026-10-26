@@ -30,7 +30,7 @@
 		"ws": "^8.22.0"
 	},
 	"devDependencies": {
-		"@companion-module/tools": "^3.0.1",
+		"@companion-module/tools": "^3.2.0",
 		"@types/node": "^25.9.3",
 		"@types/ws": "^8.18.2",
 		"ajv": "^8.20.0",
