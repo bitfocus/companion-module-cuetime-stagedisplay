@@ -15,6 +15,10 @@ the integration test plan §4:
 
 - Python 3.11+ with `websockets` and `requests` (no pytest needed).
 - A CueTime device reachable on TCP 8081.
+- Preset rows (group P) additionally need the module's presets dragged onto a
+  Companion page; without them those six rows skip. The presets' *wiring* is
+  covered in CI by `src/presets.test.ts`, so the skips cost end-to-end coverage
+  only.
 - Companion 5.1+ reachable over HTTP for the module-facing rows (A, F, P).
 - `adb` able to reach the **same** device for A2 (app restart), A3 (outage) and F4
   (local touch) — `adb connect <device>:5555`. The serial is chosen by matching the
