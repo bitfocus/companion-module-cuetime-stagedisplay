@@ -3,6 +3,7 @@ import type {
 	CompanionStaticUpgradeProps,
 	CompanionStaticUpgradeResult,
 	CompanionStaticUpgradeScript,
+	CompanionUpgradeContext,
 } from '@companion-module/base'
 import type { Config } from './main.ts'
 
@@ -58,7 +59,7 @@ function upgradeShowMessage(action: CompanionMigrationAction, changed: Companion
 		touched = true
 	}
 
-	const flash = LEGACY_FLASH_VALUES[literalValue(options.flash as StoredOption)]
+	const flash = LEGACY_FLASH_VALUES[literalValue(options.flash)]
 	if (flash !== undefined) {
 		options.flash = { value: flash, isExpression: false }
 		touched = true
@@ -77,7 +78,7 @@ function upgradeShowMessage(action: CompanionMigrationAction, changed: Companion
  */
 export const UpgradeScripts: CompanionStaticUpgradeScript<Config>[] = [
 	function migrateShowMessageOptions(
-		_context,
+		_context: CompanionUpgradeContext<Config>,
 		props: CompanionStaticUpgradeProps<Config, undefined>,
 	): CompanionStaticUpgradeResult<Config, undefined> {
 		const updatedActions: CompanionMigrationAction[] = []

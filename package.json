@@ -8,6 +8,7 @@
 		"generate-icons": "node scripts/generate-icons.mjs",
 		"generate-protocol": "node scripts/generate-protocol.mjs && prettier -w src/protocol/generated.ts",
 		"typecheck": "tsc --noEmit",
+		"lint": "eslint .",
 		"clean": "node scripts/clean.mjs",
 		"build": "node scripts/generate-icons.mjs && yarn generate-protocol && tsc --noEmit && node scripts/clean.mjs && tsc -p tsconfig.build.json",
 		"package": "node scripts/generate-icons.mjs && yarn generate-protocol && tsc --noEmit && node scripts/clean.mjs && tsc -p tsconfig.build.json && companion-module-build",
@@ -34,8 +35,10 @@
 		"@types/node": "^25.9.3",
 		"@types/ws": "^8.18.2",
 		"ajv": "^8.20.0",
+		"eslint": "^10.2.0",
 		"prettier": "^3.8.3",
 		"typescript": "^6.0.3",
+		"typescript-eslint": "^8.56.1",
 		"vitest": "^4.1.8"
 	},
 	"resolutions": {

@@ -11,7 +11,7 @@ import {
 	isResponse,
 	isEvent,
 } from './generated.js'
-import type { CommandType, ResponseType, EventType } from './generated.js'
+import type { CommandType } from './generated.js'
 
 // The vendored schema is the contract; validating generated output against it is
 // how we catch drift between the codegen and the far-side schema.
@@ -91,7 +91,7 @@ describe('generated command builders', () => {
 			const payload = minimalObject(messageDef('Command', type))
 			delete payload.type
 			delete payload.request_id
-			const cmd = buildCommand(type as CommandType, payload as any, 'req')
+			const cmd = buildCommand(type, payload as any, 'req')
 			const ok = validateCommand(cmd)
 			expect(ok, `${type}: ${JSON.stringify(validateCommand.errors)}`).toBe(true)
 		}
@@ -141,7 +141,7 @@ describe('generated inbound parser', () => {
 			expect(parsed, `parse ${type}`).not.toBeNull()
 			expect(isResponse(parsed!)).toBe(true)
 			expect(isEvent(parsed!)).toBe(false)
-			expect((parsed as any).type).toBe(type as ResponseType)
+			expect((parsed as any).type).toBe(type)
 		}
 	})
 
@@ -157,7 +157,7 @@ describe('generated inbound parser', () => {
 			expect(parsed, `parse ${type}`).not.toBeNull()
 			expect(isEvent(parsed!)).toBe(true)
 			expect(isResponse(parsed!)).toBe(false)
-			expect((parsed as any).type).toBe(type as EventType)
+			expect((parsed as any).type).toBe(type)
 		}
 	})
 

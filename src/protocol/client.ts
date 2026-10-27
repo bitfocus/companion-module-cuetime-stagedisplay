@@ -153,7 +153,7 @@ export class ProtocolClient {
 				// `handshakeTimeout` bounds the case the liveness watchdog cannot see: a socket
 				// that never opens, so never starts its liveness checks. Without it a
 				// black-holed address would sit in `connecting` for the OS TCP timeout.
-				new WebSocket(url, { handshakeTimeout: 10000 }) as unknown as WebSocketLike)
+				new WebSocket(url, { handshakeTimeout: 10000 }))
 		this.reconnectBaseMs = options.reconnectBaseMs ?? RECONNECT_BASE_MS
 		this.reconnectMaxMs = options.reconnectMaxMs ?? RECONNECT_MAX_MS
 		this.livenessIntervalMs = options.livenessIntervalMs ?? LIVENESS_INTERVAL_MS

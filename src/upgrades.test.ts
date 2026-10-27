@@ -3,7 +3,7 @@ import type { CompanionMigrationAction, CompanionStaticUpgradeProps } from '@com
 import { UpgradeScripts } from './upgrades.ts'
 import type { Config } from './main.ts'
 
-const script = UpgradeScripts[0]!
+const script = UpgradeScripts[0]
 
 function action(actionId: string, options: Record<string, unknown>): CompanionMigrationAction {
 	return { id: `a-${actionId}`, controlId: 'c1', actionId, options: options as never }
@@ -11,7 +11,7 @@ function action(actionId: string, options: Record<string, unknown>): CompanionMi
 
 function run(actions: CompanionMigrationAction[]) {
 	const props = {
-		config: { host: '192.168.1.53', port: '8081', 'cuetime-display': null } as Config,
+		config: { host: '192.168.1.53', port: '8081', 'cuetime-display': null },
 		secrets: null,
 		actions,
 		feedbacks: [],
@@ -38,7 +38,7 @@ describe('upgrade scripts', () => {
 		const result = run([action('show_message', { text: { value: 'Hurry Up', isExpression: false } })])
 
 		expect(result.updatedActions).toHaveLength(1)
-		expect(literal(result.updatedActions[0]!.options, 'message_number')).toBe(0)
+		expect(literal(result.updatedActions[0].options, 'message_number')).toBe(0)
 	})
 
 	it('rewrites legacy flash values that are no longer valid choices', () => {
@@ -48,8 +48,8 @@ describe('upgrade scripts', () => {
 		])
 
 		// `disable` historically meant "leave the flag alone", which is what `keep` now says.
-		expect(literal(result.updatedActions[0]!.options, 'flash')).toBe('keep')
-		expect(literal(result.updatedActions[1]!.options, 'flash')).toBe('on')
+		expect(literal(result.updatedActions[0].options, 'flash')).toBe('keep')
+		expect(literal(result.updatedActions[1].options, 'flash')).toBe('on')
 	})
 
 	it('preserves the operator text and expression flags', () => {
@@ -60,10 +60,10 @@ describe('upgrade scripts', () => {
 			}),
 		])
 
-		const options = result.updatedActions[0]!.options as Record<string, { value?: unknown; isExpression?: boolean }>
-		expect(options.text!.value).toBe('Hold Mic Closer')
-		expect(options.text!.isExpression).toBe(false)
-		expect(options.flash!.isExpression).toBe(false)
+		const options = result.updatedActions[0].options as Record<string, { value?: unknown; isExpression?: boolean }>
+		expect(options.text.value).toBe('Hold Mic Closer')
+		expect(options.text.isExpression).toBe(false)
+		expect(options.flash.isExpression).toBe(false)
 	})
 
 	it('leaves already-migrated actions alone, so it is safe to run twice', () => {
@@ -89,6 +89,6 @@ describe('upgrade scripts', () => {
 
 	it('copes with an empty option set rather than throwing', () => {
 		const result = run([action('show_message', {})])
-		expect(literal(result.updatedActions[0]!.options, 'message_number')).toBe(0)
+		expect(literal(result.updatedActions[0].options, 'message_number')).toBe(0)
 	})
 })

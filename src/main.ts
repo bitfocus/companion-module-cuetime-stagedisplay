@@ -1,11 +1,4 @@
-import {
-	InstanceBase,
-	Regex,
-	InstanceStatus,
-	InstanceTypes,
-	SomeCompanionConfigField,
-	CompanionInputFieldTextInput,
-} from '@companion-module/base'
+import { InstanceBase, Regex, InstanceStatus, InstanceTypes, SomeCompanionConfigField } from '@companion-module/base'
 import type { JsonObject } from '@companion-module/base'
 import { UpdateActions } from './actions.ts'
 import { UpdateFeedbacks } from './feedbacks.ts'
@@ -30,7 +23,6 @@ export interface Config extends JsonObject {
 	'cuetime-display': string | null
 }
 
-// eslint-disable-next-line @typescript-eslint/no-empty-object-type
 interface ModuleInstanceTypes extends InstanceTypes {
 	config: Config
 	secrets: undefined
@@ -234,7 +226,7 @@ class ModuleInstanceImpl extends InstanceBase<ModuleInstanceTypes> implements Mo
 				width: 8,
 				regex: Regex.IP,
 				isVisibleExpression: '$(cuetime-display:cuetime-display) == null',
-			} as CompanionInputFieldTextInput & { width: number },
+			},
 			{
 				type: 'textinput',
 				id: 'port',
@@ -243,7 +235,7 @@ class ModuleInstanceImpl extends InstanceBase<ModuleInstanceTypes> implements Mo
 				regex: Regex.PORT,
 				default: '8081',
 				isVisibleExpression: '$(cuetime-display:cuetime-display) == null',
-			} as CompanionInputFieldTextInput & { width: number },
+			},
 		]
 	}
 

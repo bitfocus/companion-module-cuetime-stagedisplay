@@ -11,7 +11,6 @@ import {
 	icon_frame,
 	icon_flash,
 	icon_glow,
-	icon_eye,
 	icon_bar_eye,
 } from './generated-icons.ts'
 

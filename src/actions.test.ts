@@ -50,16 +50,14 @@ describe('action callbacks do not block on the device reply', () => {
 				defs = definitions as Record<string, ActionDef>
 			},
 			// Never settles: a device that has gone away.
-			sendCommand: (type: CommandType) => {
+			sendCommand: async (type: CommandType) => {
 				sent.push(type)
 				return new Promise<void>((resolve) => unresolved.push(() => resolve()))
 			},
-			sendCommandDetailed: (type: CommandType) =>
+			sendCommandDetailed: async (type: CommandType) =>
 				new Promise((resolve) => {
 					sent.push(type)
-					unresolved.push(() =>
-						resolve({ ok: false, type: 'error_response', code: 'TIMEOUT', message: 'no reply' } as never),
-					)
+					unresolved.push(() => resolve({ ok: false, type: 'error_response', code: 'TIMEOUT', message: 'no reply' }))
 				}),
 		} as unknown as ModuleInstance
 	}
@@ -101,7 +99,7 @@ describe('action callbacks do not block on the device reply', () => {
 			// If the callback awaited the reply this would never resolve, and Companion
 			// would time the action out.
 			const outcome = await Promise.race([
-				Promise.resolve(callback!({ options: {} })).then(() => 'returned'),
+				Promise.resolve(callback({ options: {} })).then(() => 'returned'),
 				new Promise((resolve) => setTimeout(() => resolve('hung'), 250)),
 			])
 			expect(outcome, `${name} must not wait for the reply`).toBe('returned')
@@ -109,7 +107,7 @@ describe('action callbacks do not block on the device reply', () => {
 	})
 
 	it('still dispatches each command', () => {
-		for (const name of zeroOptionActions) defs[name]!.callback({ options: {} })
+		for (const name of zeroOptionActions) defs[name].callback({ options: {} })
 		expect(sent.length).toBeGreaterThanOrEqual(zeroOptionActions.length)
 	})
 
@@ -125,15 +123,15 @@ describe('action callbacks do not block on the device reply', () => {
 		const self = {
 			...guarded,
 			setActionDefinitions: (d: unknown) => Object.assign(localDefs, d),
-			sendCommand: (type: CommandType) => {
+			sendCommand: async (type: CommandType) => {
 				localSent.push(type)
 				return Promise.resolve()
 			},
 		} as unknown as ModuleInstance
 
 		UpdateActions(self)
-		localDefs['navigate_next_session']!.callback({ options: {} })
-		localDefs['navigate_previous_session']!.callback({ options: {} })
+		localDefs['navigate_next_session'].callback({ options: {} })
+		localDefs['navigate_previous_session'].callback({ options: {} })
 		expect(localSent).toEqual([])
 	})
 })

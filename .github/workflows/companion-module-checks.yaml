@@ -43,3 +43,20 @@ jobs:
             exit 1
           fi
           echo "src/protocol/generated.ts is in sync with the vendored schema."
+
+  lint:
+    name: Lint
+
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Enable corepack
+        run: corepack enable
+
+      - name: Install dependencies
+        run: yarn install --immutable
+
+      - name: Run eslint
+        run: yarn lint
