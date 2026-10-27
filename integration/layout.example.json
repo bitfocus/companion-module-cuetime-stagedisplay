@@ -1,5 +1,5 @@
 {
-	"_comment": "Copy to conformance/layout.json and fill in the Companion page/row/column of each preset button. Page is 1-based; rows and columns are 0-based.",
+	"_comment": "Copy to integration/layout.json and fill in the Companion page/row/column of each preset button. Page is 1-based; rows and columns are 0-based.",
 	"page": 1,
 	"pressed": {
 		"toggle_playback": [0, 0],

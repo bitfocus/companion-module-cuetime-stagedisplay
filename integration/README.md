@@ -1,7 +1,7 @@
-# T2 conformance harness
+# T2 integration harness
 
-Three-way conformance testing for this module, as specified in
-[`docs/CONFORMANCE.md`](../docs/CONFORMANCE.md) §4:
+Three-way integration testing for this module, as specified in
+the integration test plan §4:
 
 1. **Intent** — press buttons through Companion's own HTTP API (no module code is
    imported, so a pass means what an operator would see).
@@ -21,17 +21,17 @@ Three-way conformance testing for this module, as specified in
 
 ```sh
 # inventory
-python3 conformance/run_conformance.py --list
+python3 integration/run_integration.py --list
 
 # device scenarios (no Companion needed): greeting, timer, program edits,
 # messages/flash, display state, error paths, back-pressure
-python3 conformance/run_conformance.py
+python3 integration/run_integration.py
 
 # module-facing scenarios: hydration (A) and reverse-direction tracking (F)
-COMPANION_URL=http://companion.local:8000 python3 conformance/run_conformance.py --groups A,F
+COMPANION_URL=http://companion.local:8000 python3 integration/run_integration.py --groups A,F
 
 # a single scenario, verbose
-python3 conformance/run_conformance.py --only D3 -v
+python3 integration/run_integration.py --only D3 -v
 ```
 
 Configuration (CLI flags win):
@@ -46,7 +46,7 @@ Configuration (CLI flags win):
 
 ## What a run writes
 
-`conformance/results/<UTC stamp>/`:
+`integration/results/<UTC stamp>/`:
 
 | File | Content |
 | --- | --- |
@@ -57,7 +57,7 @@ Configuration (CLI flags win):
 | `notes.md` | summary plus failures, for pasting into an issue |
 
 `results/` is git-ignored. When a run is the evidence for a release, copy its
-`run.json` + `notes.md` into `docs/conformance-runs/<tag>/` and commit those.
+`run.json` + `notes.md` into `docs/integration-runs/<tag>/` and commit those.
 
 ## Safety
 
@@ -84,5 +84,5 @@ async def b7_reset(ctx: Ctx) -> None:
 Companion is configured. Device-only scenarios omit `needs_companion=True` and run
 everywhere; module-facing ones set it and are skipped without a Companion URL.
 
-Keep `docs/CONFORMANCE.md` §5 in step with the code — the table is the contract of
-what has been tested, `--list` is the inventory.
+Keep the plan's §5 table in step with the code — the table is the contract of what
+has been tested, `--list` is the inventory.

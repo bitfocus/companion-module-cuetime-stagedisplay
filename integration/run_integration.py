@@ -1,14 +1,14 @@
 #!/usr/bin/env python3
-"""T2 three-way conformance runner (docs/CONFORMANCE.md §4).
+"""T2 three-way integration runner (the integration test plan §4).
 
 Drives Companion's HTTP API, observes the device on its own WebSocket client, and
 compares the module's variables against the device's own report.
 
 Usage:
-    python3 conformance/run_conformance.py                        # device scenarios
-    python3 conformance/run_conformance.py --companion http://host:8000
-    python3 conformance/run_conformance.py --list
-    python3 conformance/run_conformance.py --only D3,G3 -v
+    python3 integration/run_integration.py                        # device scenarios
+    python3 integration/run_integration.py --companion http://host:8000
+    python3 integration/run_integration.py --list
+    python3 integration/run_integration.py --only D3,G3 -v
 
 Exit code: 0 when every executed scenario passed, 1 otherwise.
 """
@@ -120,12 +120,12 @@ async def run_one(
 
 def main() -> int:
 	global cfg_verbose
-	parser = argparse.ArgumentParser(description='CueTime module three-way conformance runner')
+	parser = argparse.ArgumentParser(description='CueTime module three-way integration runner')
 	parser.add_argument('--device', help='device host (default: CUETIME_DEVICE or 192.168.1.145)')
 	parser.add_argument('--port', type=int, help='device WebSocket port (default 8081)')
 	parser.add_argument('--companion', help='Companion base URL, e.g. http://host:8000')
 	parser.add_argument('--connection', help='Companion connection id or label')
-	parser.add_argument('--page', type=int, help='Companion page holding the conformance layout')
+	parser.add_argument('--page', type=int, help='Companion page holding the integration layout')
 	parser.add_argument('--layout', help='JSON file mapping preset id -> [row, col] (COMPANION_LAYOUT)')
 	parser.add_argument('--emit-layout', action='store_true', help='print a layout template for the presets and exit')
 	parser.add_argument('--groups', help='comma-separated scenario groups (A,B,C,D,E,F,G,S)')
@@ -291,7 +291,7 @@ def main() -> int:
 	write_notes(
 		out_dir / 'notes.md',
 		[
-			f'# Conformance run {stamp}',
+			f'# Integration run {stamp}',
 			'',
 			f'- device: `ws://{cfg.device_url}`',
 			f'- device build: `{hello.get("version_name")} ({hello.get("version_code")})` screen `{hello.get("screen_id")}`',

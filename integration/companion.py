@@ -1,6 +1,6 @@
 """Minimal client for Companion's HTTP API (5.1.x).
 
-Only the endpoints the conformance matrix needs:
+Only the endpoints the integration matrix needs:
 
   POST /api/location/<page>/<row>/<col>/press|down|up   run a button
   GET  /api/variable/<label>/<name>/value              read a module variable

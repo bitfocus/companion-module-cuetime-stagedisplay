@@ -1,6 +1,6 @@
 """Run artifacts: frame timelines, variable poll logs, and check results.
 
-A run with no artifacts is not evidence (see docs/CONFORMANCE.md §8), so every
+A run with no artifacts is not evidence (see the integration test plan §8), so every
 scenario appends to the same bundle: ``run.json``, ``timeline-<id>.jsonl``,
 ``variables-<id>.jsonl``, ``junit.xml`` and ``notes.md``.
 """
@@ -91,7 +91,7 @@ def write_run_json(path: Path, payload: dict[str, Any]) -> None:
 	path.write_text(json.dumps(payload, indent=2) + '\n', encoding='utf-8')
 
 
-def write_junit(path: Path, results: list[ScenarioResult], suite_name: str = 'cuetime-conformance') -> None:
+def write_junit(path: Path, results: list[ScenarioResult], suite_name: str = 'cuetime-integration') -> None:
 	total = len(results)
 	failures = sum(1 for r in results if not r.ok and r.skipped is None)
 	skipped = sum(1 for r in results if r.skipped is not None)
@@ -109,7 +109,7 @@ def write_junit(path: Path, results: list[ScenarioResult], suite_name: str = 'cu
 		case = ET.SubElement(
 			suite,
 			'testcase',
-			{'classname': f'conformance.{result.group}', 'name': f'{result.id} {result.title}', 'time': f'{result.duration:.3f}'},
+			{'classname': f'integration.{result.group}', 'name': f'{result.id} {result.title}', 'time': f'{result.duration:.3f}'},
 		)
 		if result.skipped is not None:
 			ET.SubElement(case, 'skipped', {'message': result.skipped})

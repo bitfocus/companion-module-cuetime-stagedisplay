@@ -1,4 +1,4 @@
-"""Configuration for the T2 three-way conformance harness.
+"""Configuration for the T2 three-way integration harness.
 
 Everything is environment-driven so a run is reproducible from a shell history:
 CUETIME_DEVICE, CUETIME_DEVICE_PORT, COMPANION_URL, COMPANION_CONNECTION,
@@ -23,7 +23,7 @@ class Config:
 	companion_connection: str | None = None
 	companion_page: int = 1
 	timeout: float = 5.0
-	output_dir: str = "conformance/results"
+	output_dir: str = "integration/results"
 	layout_path: str | None = None
 	groups: tuple[str, ...] = ()
 	only: tuple[str, ...] = field(default_factory=tuple)
@@ -52,7 +52,7 @@ class Config:
 
 
 class Layout:
-	"""Preset id -> (row, column) on the Companion conformance page.
+	"""Preset id -> (row, column) on the Companion integration page.
 
 	Press-driven scenarios need to know where the operator put each preset
 	button; nothing in the HTTP API can discover a layout. Absent entries are

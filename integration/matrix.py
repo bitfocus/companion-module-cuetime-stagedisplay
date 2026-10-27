@@ -1,4 +1,4 @@
-"""The T2 conformance matrix (docs/CONFORMANCE.md §5) as executable scenarios.
+"""The T2 integration matrix (the integration test plan §5) as executable scenarios.
 
 Two families:
 
@@ -205,7 +205,7 @@ async def _press(ctx: Ctx, preset: str) -> None:
 	if ctx.companion is None:
 		raise SkipScenario('needs Companion')
 	if ctx.layout is None:
-		raise SkipScenario('no layout configured (see conformance/layout.example.json)')
+		raise SkipScenario('no layout configured (see integration/layout.example.json)')
 	where = ctx.layout.locate(preset)
 	if where is None:
 		raise SkipScenario(f'preset {preset!r} is not in the layout')
@@ -325,7 +325,7 @@ async def c1_session_crud(ctx: Ctx) -> None:
 	ok, resp = await ctx.device.command_ok(
 		'add_session',
 		session_id=session_id,
-		name='Conformance Session',
+		name='Integration Session',
 		presenter_name='Harness',
 		mode='countdown',
 		seconds=90,
@@ -344,7 +344,7 @@ async def c1_session_crud(ctx: Ctx) -> None:
 
 @scenario('C2', 'C', 'add_message returns entity_id and delete_message undoes it', '§3.2')
 async def c2_message_crud(ctx: Ctx) -> None:
-	content = f'Conformance message {uuid.uuid4().hex[:6]}'
+	content = f'Integration message {uuid.uuid4().hex[:6]}'
 	before = len(DeviceClient.message_list(await ctx.snapshot()))
 	ok, resp = await ctx.device.command_ok('add_message', content=content)
 	ctx.check('add_message acked', ok, f'code={resp.get("code")}')
@@ -391,7 +391,7 @@ async def d2_show_adhoc_text(ctx: Ctx) -> None:
 	await ctx.restore()
 	before_status = await ctx.snapshot()
 	before_messages = len(DeviceClient.message_list(before_status))
-	text = f'Conformance ad-hoc {uuid.uuid4().hex[:6]}'
+	text = f'Integration ad-hoc {uuid.uuid4().hex[:6]}'
 
 	mark = ctx.device.mark
 	ok, resp = await ctx.device.command_ok('show_message', text=text)
@@ -484,7 +484,7 @@ async def d6_flash_separation(ctx: Ctx) -> None:
 	ok, resp = await ctx.device.command_ok(
 		'add_session',
 		session_id=session_id,
-		name='Conformance Time-Up',
+		name='Integration Time-Up',
 		mode='countdown',
 		seconds=3,
 		flash_start_time_seconds=2,
@@ -705,7 +705,7 @@ async def a5_idle_neighbour(ctx: Ctx) -> None:
 	previous = await _ensure_current(ctx)
 	temp = f'conf-{uuid.uuid4().hex[:8]}'
 	ok, resp = await ctx.device.command_ok(
-		'add_session', session_id=temp, name='Conformance Idle', mode='countdown', seconds=60
+		'add_session', session_id=temp, name='Integration Idle', mode='countdown', seconds=60
 	)
 	if not ok:
 		raise SkipScenario(f'could not add a temporary session: {resp.get("code")}')

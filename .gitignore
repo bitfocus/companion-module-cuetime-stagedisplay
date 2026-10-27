@@ -32,6 +32,6 @@ yarn-error.log
 # Local scratch/planning docs — kept on disk, never tracked
 plans/
 
-# Conformance evidence bundles — commit a specific run into docs/ when releasing
-conformance/results/
+# Integration evidence bundles — publish a specific run when releasing
+integration/results/
 __pycache__/

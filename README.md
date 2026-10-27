@@ -12,9 +12,13 @@ The authoritative machine-readable schema is
 [`schemas/protocol-schema.json`](./schemas/protocol-schema.json), **vendored
 verbatim** from the sibling `Android-Display-App/` repo. Both the spec and the schema
 are generated far-side from the Kotlin `@Serializable` data classes; the vendored
-copies are committed so this repo builds standalone. See
-[docs/CONFORMANCE.md](./docs/CONFORMANCE.md) for the exact far-side commit, content
-hash, and regeneration instructions.
+copies are committed so this repo builds standalone.
+
+Provenance of the current copies: protocol **Version Code 147** (reviewed
+2026-10-12), far-side `docs/HTTP_JSON_CONTROL_PROTOCOL.md` at `d45cf3be`,
+far-side `schemas/protocol-schema.json` at `3fec03ee`, schema md5
+`aff80bf5064d726ab29a4d4f80b83625`. The copies must stay byte-identical to the
+far-side files.
 
 `src/protocol/generated.ts` is generated from the vendored schema by
 `scripts/generate-protocol.mjs`. After updating the vendored schema, run:
