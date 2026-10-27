@@ -39,10 +39,17 @@
 		"prettier": "^3.8.3",
 		"typescript": "^6.0.3",
 		"typescript-eslint": "^8.56.1",
-		"vitest": "^4.1.8"
+		"vitest": "^4.1.12"
 	},
 	"resolutions": {
-		"esbuild": "^0.28.1"
+		"colord": "^2.10.0",
+		"esbuild": "^0.28.1",
+		"fast-uri": "^3.1.9",
+		"postcss": "^8.5.23",
+		"source-map-js": "^1.2.2",
+		"tar": "^7.5.22",
+		"undici": "^6.29.1",
+		"vite": "^8.3.5"
 	},
 	"prettier": "@companion-module/tools/.prettierrc.json",
 	"packageManager": "yarn@4.12.0"
