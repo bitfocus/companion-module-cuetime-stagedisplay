@@ -77,6 +77,8 @@ export function UpdateFeedbacks(self: ModuleInstance): void {
 		is_blackout: {
 			name: 'Blackout Mode Active',
 			type: 'advanced',
+			// API 2.1 requires advanced feedbacks to declare the style properties they touch.
+			affectedProperties: ['bgcolor', 'color', 'png64'],
 			options: [],
 			callback: (): CompanionAdvancedFeedbackResult => {
 				if (checkIsBlackout(self.state)) {
@@ -178,6 +180,8 @@ export function UpdateFeedbacks(self: ModuleInstance): void {
 			description:
 				'Remaining proportion of a countdown session, drawn as a strip. The device only reports a progress percentage for a countdown, so a count-up or Time of Day session shows an empty bar for its whole life.',
 			type: 'advanced',
+			// Draws a strip via imageBuffer when one is available, otherwise falls back to a text bar.
+			affectedProperties: ['bgcolor', 'text', 'imageBuffer'],
 			options: [
 				{
 					type: 'colorpicker',

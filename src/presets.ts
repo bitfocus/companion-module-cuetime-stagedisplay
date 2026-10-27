@@ -1,4 +1,4 @@
-import type { ModuleInstance } from './main.ts'
+import type { ModuleInstance, ModuleInstanceTypes } from './main.ts'
 import type { CompanionPresetDefinitions, CompanionPresetSection } from '@companion-module/base'
 import {
 	icon_next,
@@ -15,7 +15,7 @@ import {
 } from './generated-icons.ts'
 
 export function UpdatePresets(self: ModuleInstance): void {
-	const presets: CompanionPresetDefinitions = {
+	const presets: CompanionPresetDefinitions<ModuleInstanceTypes> = {
 		navigate_next: {
 			type: 'simple',
 			name: 'Navigate to Next Session',
@@ -518,19 +518,26 @@ export function UpdatePresets(self: ModuleInstance): void {
 		},
 	}
 
-	const structure: CompanionPresetSection[] = Object.keys(presets).map((id) => ({
-		id,
-		name: presets[id]?.name || '',
-		definitions: [
-			{
-				id: 'default',
-				name: presets[id]?.name || '',
-				description: '',
-				type: 'simple',
-				presets: [id],
-			},
-		],
-	}))
+	const structure: CompanionPresetSection[] = Object.keys(presets).map((id) => {
+		// Every preset this module defines is a plain 'simple' entry; the union also covers
+		// 'alternatives' groups, which carry no name of their own.
+		const preset = presets[id]
+		const name = preset && preset.type !== 'alternatives' ? preset.name : ''
+
+		return {
+			id,
+			name,
+			definitions: [
+				{
+					id: 'default',
+					name,
+					description: '',
+					type: 'simple',
+					presets: [id],
+				},
+			],
+		}
+	})
 
 	self.setPresetDefinitions(structure, presets)
 }

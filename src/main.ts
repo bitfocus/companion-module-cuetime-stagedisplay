@@ -23,7 +23,7 @@ export interface Config extends JsonObject {
 	'cuetime-display': string | null
 }
 
-interface ModuleInstanceTypes extends InstanceTypes {
+export interface ModuleInstanceTypes extends InstanceTypes {
 	config: Config
 	secrets: undefined
 }
