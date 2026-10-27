@@ -838,7 +838,10 @@
               "string",
               "null"
             ]},
-            "flash": {"type": "boolean"}
+            "flash": {"type": [
+              "boolean",
+              "null"
+            ]}
           },
           "required": ["type"]
         },

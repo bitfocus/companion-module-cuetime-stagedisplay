@@ -4,7 +4,7 @@
 | Validation |  |  |  |
 | - | - | - | - |
 |----------------|-----------------|----------------|-----------------|
-| Reviewed Date  | 2026-10-09      | Version Code   | 146             |
+| Reviewed Date  | 2026-10-12      | Version Code   | 147             |
 
 This document is the complete specification of the **CueTime JSON control
 protocol** as implemented by the CueTime Display Android application. It
@@ -141,6 +141,38 @@ is a missing key (for instance a `view` section with no message on screen omits
 omits `entity_id`). Read such a field as "no value", and do not require its
 presence unless the field table marks it required (`Req: yes`) or the text says
 so.
+
+**An inbound `null` is read as if the key were absent.** `{"name": null}` and
+`{}` are the same request for every optional string field: the value you sent is
+discarded and the field keeps its current value (or takes its documented
+default), exactly as if you had omitted it. For a **required** string — an id, a
+`name`, a message `content`, a `program_id` — a `null` is rejected with
+`INVALID_PARAMETER` naming the field, exactly like a missing key; it is never
+read as an empty value and never stored. The same holds on the WebSocket
+transport, which shares this validation.
+
+**An empty string is a value, not a missing key.** `{"name": ""}` **sets the
+field to the empty string** — it does not mean "keep the current value", and it
+is not the same request as `{}`. Where a field's own entry rejects an empty
+value, that entry is the authority.
+
+Two fields accept an empty string today and are **left that way for now**: a
+session's `name`, and a stored message's `content` (`add_message` /
+`update_message` store `""`, which displays as a message with no text). The
+ad-hoc `text` of `show_message` is the one that is enforced: blank is rejected
+with `INVALID_PARAMETER`, on this transport and on Crestron.
+
+Two things this is not:
+
+* **Not type coercion.** A field that is *present* with a value is read as sent,
+  including the literal string `"null"` — that is the four characters, not a
+  null, and it is stored or looked up as such.
+* **Not a licence to send `null` for a required field.** It is rejected, not
+  defaulted.
+
+Earlier builds read a `null` string as the text `"null"`. That is fixed in
+1.1.2.25 (147) — see the Crestron document's §4.5 and revision history for the
+same rule on the other transport.
 
 **Send a fresh, unique `request_id` with every command.** That is the contract
 here, as it is on every transport: the id is what makes a reply attributable to
@@ -527,7 +559,7 @@ text.
   "message_id": null,
   "text": "example",
   "request_id": null,
-  "flash": false
+  "flash": null
 }
 ```
 | Field | Type | Req | Notes |
@@ -546,57 +578,57 @@ Provide **either** `message_id` **or** `text`:
   different content on screen with no error for anyone to notice.
 * If neither is supplied (or both are empty), the command is rejected with
   `INVALID_PARAMETER`.
-* If `text` matches no stored message in the loaded program, the display stores
-  it as a new message and then shows that one. `is_showing` is reported per
-  message id ([§4.8](#48-messages_status_response)), so a message on screen has
-  to exist in the program to be named by the screen. Storing it changes the
-  message list, so that one `show_message` also announces
-  `program_changed_event`.
+* If `text` is supplied instead, it is shown as an **ad‑hoc message** — free text
+  on the glass that is **not** one of the loaded program's messages. The program
+  is neither read nor written: no message is looked up by content, none is
+  created, the message list does not change, and no `program_changed_event`
+  follows. `view.message_text` is the text and `view.message_id` is empty, and
+  nothing in `messages_status_response` reports as showing.
 
-**The two forms differ in whether they change the program.**
+**The two forms act on different things.**
 
 `message_id` is a **read‑only lookup** of an existing stored program message; it
 displays that message's current content and **does not create or modify** any
-message. (Use `add_message` / `update_message` to create or change stored
-messages; only ad-hoc `text` above is stored automatically.)
+message. An id that is not present in the loaded program is rejected with
+`INVALID_PARAMETER` (see above). It also **requires a loaded program**, because
+there is nothing to look up without one, and is rejected with `INVALID_COMMAND`
+when none is loaded. (Use `add_message` / `update_message` to create or change
+stored messages, and `delete_message` to remove one — `hide_message` only takes a
+message off screen.)
 
-`text` **reuses** a stored message when the content matches, and otherwise
-**creates** one:
+`text` shows **ad‑hoc text** and does not touch the program at all: it is a
+display‑state change only. Content is **not** compared against the program's
+messages — two messages can share content, so the same words are not a reliable
+way to name one; a controller that wants a *stored* message on the glass names it
+with `message_id`. Because the form reads and writes nothing, **`text` needs no
+loaded program** and is accepted on a display that has none.
 
-* If the loaded program already holds a message with that content (compared
-  **after trimming**), that message is shown and nothing is added.
-* If no message matches, a **new message is created** in the loaded program — a
-  generated unique id and version, exactly as `add_message` produces — and then
-  displayed. The message therefore appears in `program_response` and in
-  `messages_status_response` from then on, and the change is announced like any
-  other message edit (a `messages_status_event`, plus a `program_changed_event`).
+The ad‑hoc text is reported in the `view` section (§4.5): `message_text` is the
+text and `message_id` is empty. The message list is the program's own, so it
+gains nothing and every `is_showing` in the `messages` section (§4.8) stays
+`false` — a controller that renders only `messages_status_response` sees nothing
+marked as showing while ad‑hoc text is up and must read the `view` section for
+the text. The `ack_response` carries **no** `entity_id`, because there is no
+stored entity to name. `hide_message` takes the text off screen; it was never in
+the program, so there is nothing to delete.
 
-So a controller that shows transient text accumulates messages: prefer
-`message_id` for content the program already holds. `hide_message` takes a
-displayed message off screen but does **not** remove it from the program — use
-`delete_message` for that. The `ack_response` carries the id of the message that
-ended up on screen in `entity_id` — the message named by `message_id`, or the
-stored message reused/created for `text`. (It is in the `messages` section of
-status and in `messages_status_event` too.)
+A request carrying **neither** `message_id` nor `text` is `INVALID_PARAMETER`,
+checked first: a malformed request is a caller bug whatever the device state.
+Supplying both is not ambiguous — `message_id` wins, `text` is discarded, and the
+ad‑hoc form is not used.
 
-Because the `text` form may have to create a message, and the `message_id` form
-looks one up in the loaded program, **`show_message` requires a loaded program**
-and is rejected with `INVALID_COMMAND` when there is none — the same rule
-`add_message`, `delete_message` and `update_message` follow. (A request carrying
-neither `message_id` nor `text` is `INVALID_PARAMETER` instead, checked first: a
-malformed request is a caller bug whatever the device state.) Supplying
-`message_id` as well does not let the text form skip the requirement — the
-`message_id` wins, `text` is discarded, and nothing is created. A `show_message`
-that creates a message is a program change, so it is announced like one — the
-same `messages_status_event` a reuse or a by-id show pushes, plus a
-`program_changed_event`.
-
-**`flash`:** `true` turns the 1 Hz message flash on as the message is displayed.
-Omitting it (or sending `false`) leaves the flash state exactly as it is — it does
-**not** turn flashing off, because the flag is shared with `set_flash` /
-`toggle_flash` and may be on deliberately. It is reported as `is_flashing` in the
-`messages` section (§4.8) and in the `view` section (§4.5), and `hide_message`
-turns it off.
+**`flash` is three-state, and is applied to the message being shown.** `true`
+turns the 1 Hz message flash on; `false` turns it off, stopping a flash that is
+already running — including one this message would otherwise inherit from the
+message it replaces; **omitting the field leaves the flash state exactly as it
+is**, so a command that says nothing about flash never changes it. The flag is
+shared with `set_flash` / `toggle_flash` and may be on deliberately, so an
+integrator that does not mention `flash` must not assume it is off. The
+resulting state is reported as `is_flashing` in the `messages` section (§4.8) and
+in the `view` section (§4.5), and `hide_message` turns it off. A `show_message`
+that changes the flash is announced like any other flash change (the updated
+`is_flashing`), so a controller that asked for a steady message is told the flash
+stopped.
 
 This transitions the display into message mode; the message persists on screen
 until replaced by another display command (e.g. `hide_message`, `show_idle`, or a
@@ -754,10 +786,10 @@ rather than a rounded number.
 Turns the "time is up" overlay on or off with the required `enabled` field. The
 setting is **persisted** across restarts. With it off, a countdown that reaches
 zero does not show the overlay; the clock's own behavior is unchanged. It is
-reported as `is_time_up_display` in the settings section (§4.6), and it is one of
-the inputs to `is_time_up_flashing` in the control-center and view sections
-(§4.4, §4.5), which is what actually reports whether the overlay is showing right
-now. Never rejected.
+reported as `is_time_up_display` in the settings section (§4.6), and it gates the
+time-up cue in `is_time_up_flashing` in the control-center and view sections
+(§4.4, §4.5) — with it off the cue never reports, while the session's own flash
+window still does. Never rejected.
 
 ```json
 { "type": "set_is_time_up_display", "request_id": null, "enabled": false }
@@ -1325,8 +1357,10 @@ do.
 
 `entity_id` is present when the command created or resolved a stored entity —
 currently `add_session` (the new session's id, supplied or generated),
-`add_message` (the new message's id) and `show_message` (the id of the message
-shown, whether it was named by `message_id` or reused/created from `text`).
+`add_message` (the new message's id) and `show_message` addressed by
+`message_id` (that message's id). Every other mutating command omits it —
+including `show_message` addressed by `text`, whose ad‑hoc message is not a
+stored entity to name (see §3.2).
 Every other mutating command omits it. Treat `entity_id` as **optional on any
 `ack_response`**: which commands fill it may grow, so read it when it is there
 and fall back to a status command (`request_status`, `get_program`) or the
@@ -1365,7 +1399,7 @@ holds on both transports and for every rejection code below.
 
 | Code                 | Description                             |
 |----------------------|-----------------------------------------|
-| `INVALID_COMMAND`    | Message has no `type`, an unknown type, or is not a valid command. Also used for a command that needs a loaded program when none is: `add_message`, `update_message`, `delete_message`, `show_message`, and `move_message_up` / `move_message_down`. |
+| `INVALID_COMMAND`    | Message has no `type`, an unknown type, or is not a valid command. Also used for a command that needs a loaded program when none is: `add_message`, `update_message`, `delete_message`, `show_message` addressed by `message_id` (the `text` form needs no program — see §3.2), and `move_message_up` / `move_message_down`. |
 | `PARSE_ERROR`        | The request body or WebSocket text frame is not JSON at all, so no message could be read. Distinct from `INVALID_COMMAND`, which describes a well-formed message. |
 | `INVALID_PARAMETER`  | Missing or invalid field or value: a missing required field, an out-of-range `brightness` (`0`–`100`), a fractional or negative value in a whole-number field, a `countdown` duration below 1 second, a `time_of_day` `offset` outside `00:00:00`–`23:59:59`, a duplicated session or message id, a countdown session whose flash window cannot fire, or a `message_id` that is not in the loaded program. |
 | `UNKNOWN`            | Internal error processing the command   |
@@ -1601,6 +1635,13 @@ Units and values:
 * `session_id` is the id of the current session, and is empty when no session
   is current.
 
+**The two flash readings are separate, and this protocol has no combined flag.**
+`view.is_flashing` is the **message flash** — the text on the glass blinking at
+1 Hz — and is never true because of the session. `is_time_up_flashing` (in
+`view` and `control_center`) is the **session side**: the session's configured
+flash window, or the time-up cue at zero (that half gated by the time-up
+display setting). Read both.
+
 ### 4.6 `settings_status_response`
 
 Reply to `request_settings_status`.
@@ -1740,9 +1781,12 @@ Reply to `request_messages_status`.
 > of them when the screen is idle, on the timer, covered by a blackout, or
 > showing a device notice that is not one of the program's messages. The screen
 > decides this; the stored program does not carry it. The section's own
-> `is_flashing` reports whether that message is on screen *and* flashing; a
-> message summary carries no flash state of its own. (A message *inside a
-> program* does carry an `is_flashing`, read from the screen the same way — see
+> `is_flashing` is the **message flash** — true when the message on the glass is
+> flashing — so it is not a property of any single message summary, and never
+> true because of the session's own flashing. The session side is reported by
+> `is_time_up_flashing` instead, and the two do not overlap. The message flash
+> is only ever on while a message is displayed. (A message *inside a program*
+> does carry an `is_flashing`, read from the screen the same way — see
 > [§4.9](#49-program_response).)
 
 ### 4.9 `program_response`
@@ -2087,6 +2131,27 @@ Pushed when a program is loaded or modified.
 | `sessions_status_event`        | Program/session change  | On change        |
 | `messages_status_event`        | Program/message change  | On change        |
 | `program_changed_event`        | Program load/edit       | On change        |
+
+### 5.9 Delivery and back-pressure
+
+Each WebSocket client is served by its own bounded queue and writer, so a client
+that stops reading cannot delay another client's frames, or another transport's
+traffic.
+
+* **The queue holds at most 32 frames per client.** This is a frame count rather
+  than a byte budget: one `status`-sized payload for a 100-session program is tens
+  of KB, so a larger cap would pin tens of megabytes per stalled client.
+* **Event frames coalesce by kind — a newer frame replaces an older queued frame
+  of the same kind, and is never dropped.** Every event is a full snapshot of the
+  state it names, so replacing the older frame loses nothing about the current
+  state: a client that falls behind converges on the current state rather than
+  replaying every intermediate frame.
+* **Responses are never coalesced and never discarded.** If a response does not fit
+  the queue, the display closes that connection instead of holding or dropping the
+  answer, and closing a non-reading client never affects any other client.
+* A write that takes unusually long is logged on the device as
+  `ClientFrameWriter slow write to <client>: <N> ms` — the line to look for when a
+  client appears to have stopped receiving frames.
 
 ---
 

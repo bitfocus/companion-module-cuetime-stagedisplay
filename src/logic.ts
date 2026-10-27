@@ -82,8 +82,13 @@ export function extractVariableValues(state: ProtocolState): VariableValues {
 	const view = state.view
 	const sessions = state.sessionList
 	const currentIndex = cc?.current_session_index ?? -1
+	// From idle (-1) there is no current session, but the device still reports
+	// `is_next_session: true` while a program is loaded, and `navigate_next` selects
+	// the first session in that case (see `planNavigation`). Naming that session as
+	// "next" keeps the preset's label and its feedback honest about what a press does.
+	const idle = currentIndex < 0
 	const previous = currentIndex > 0 ? sessions[currentIndex - 1] : undefined
-	const next = currentIndex >= 0 ? sessions[currentIndex + 1] : undefined
+	const next = idle ? sessions[0] : currentIndex >= 0 ? sessions[currentIndex + 1] : undefined
 
 	return {
 		timer_run_state: cc?.timer_run_state ?? 'idle',

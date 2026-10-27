@@ -1,0 +1,16 @@
+{
+	"_comment": "Copy to conformance/layout.json and fill in the Companion page/row/column of each preset button. Page is 1-based; rows and columns are 0-based.",
+	"page": 1,
+	"pressed": {
+		"toggle_playback": [0, 0],
+		"pause": [0, 1],
+		"navigate_next": [0, 2],
+		"navigate_previous": [0, 3],
+		"add_time": [1, 0],
+		"subtract_time": [1, 1],
+		"show_message": [1, 2],
+		"toggle_flash": [1, 3],
+		"toggle_glow": [2, 0],
+		"blackout": [2, 1]
+	}
+}

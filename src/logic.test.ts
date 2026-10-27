@@ -124,6 +124,39 @@ describe('extractVariableValues', () => {
 		expect(values.next_session_name).toBe('Keynote')
 		expect(values.next_session_presenter_name).toBe('Grace')
 	})
+
+	it('names the first session as next while idle, matching is_next_session', () => {
+		// The device reports no current session yet still says navigation forward is
+		// possible, and the module's own navigate action selects the first session.
+		const state = stateFrom(
+			controlCenterEvent({ timer_run_state: 'idle', current_session_index: -1, is_next_session: true }),
+			sessionsEvent([
+				{ id: 'session-1', index: 0, name: 'Opening', presenter_name: 'Ada' },
+				{ id: 'session-2', index: 1, name: 'Keynote', presenter_name: 'Grace' },
+			]),
+		)
+
+		const values = extractVariableValues(state)
+
+		expect(values.current_session_number).toBe(0)
+		expect(values.current_session_name).toBe('')
+		expect(values.next_session_name).toBe('Opening')
+		expect(values.next_session_presenter_name).toBe('Ada')
+		expect(values.previous_session_name).toBe('')
+		expect(checkHasNextSession(state)).toBe(true)
+	})
+
+	it('leaves next blank while idle when no program is loaded', () => {
+		const state = stateFrom(
+			controlCenterEvent({ timer_run_state: 'idle', current_session_index: -1, is_next_session: false }),
+			sessionsEvent([]),
+		)
+
+		const values = extractVariableValues(state)
+
+		expect(values.next_session_name).toBe('')
+		expect(values.total_sessions).toBe(0)
+	})
 })
 
 describe('progress', () => {
