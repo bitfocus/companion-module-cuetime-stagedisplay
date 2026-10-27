@@ -224,6 +224,7 @@ Companion-side variables/status. `§` refers to the vendored spec.
 | A2  | Restart the device app while Companion stays up      | module reconnects after backoff; new `hello_event`   | rehydrated within budget; no stale values; `is_connected` feedback true | §1.3 |
 | A3  | Drop the module's TCP connection from the device side (or restart the device's WS server) | module reconnects | values converge to device truth; no duplicate-command storm | §1.3 |
 | A4  | Restart module with **no program loaded**            | hydration succeeds; `message_list`/`session_list` empty | exists without errors; position-based message action refuses locally with a warning and sends nothing | §3.2 |
+| A5  | Delete the current session (leaves the display idle) | `timer_run_state: idle`, `current_session_index: -1`, `is_next_session: true` | `current_session_number` 0, `next_session_name` = first session's name — the session `navigate_next` would select | §4.4 |
 
 ### B. Timer control
 
@@ -319,8 +320,45 @@ Two things the run found that the document does not say:
 
 Nothing in the run contradicted the module's own assumptions — expected, because
 the module was written against the vc147 semantics before the document was
-re-vendored. The Companion-dependent groups (A, F) remain unproven on hardware and
-are what the next bench session must close.
+re-vendored.
+
+#### Second run — Companion attached (same device, module loaded as a dev module)
+
+With Companion at `:8182` and the module running from the repo
+(`dev_modules_path`), **A1, A5, F1 and F2 pass**: after a connection restart the
+module's variables equal a fresh `request_status` (21 variables, including the
+neighbour names), a device-initiated start/pause reaches the module, and a
+5-command burst converges on the final session. Group P is written but skips until
+the preset buttons are placed and `COMPANION_LAYOUT` points at them.
+
+A5 paid for itself immediately: while the display sat idle the module named no
+"next session", even though the device reports `is_next_session: true` with a
+program loaded and the module's own `navigate_next` selects the first session. Fixed
+in `extractVariableValues` (idle ⇒ `next_session_name` = first session) and
+re-verified on hardware.
+
+**Warning recorded by G3:** under a non-reading client asking for 200 status
+snapshots, delivery sometimes stops part-way (196/200 and 157/200 observed) without
+the connection being closed. §5.9 says a response that cannot be queued closes the
+client, so a silent stall is a deviation worth reporting. The hard assertion in that
+scenario — a stalled client cannot delay a healthy one (17 ms snapshot) — held every
+time.
+
+### Group P — press-driven (forward path through Companion)
+
+These are the only rows that go through a real button press
+(`POST /api/location/<p>/<r>/<c>/press`). They need the presets placed on a page
+and a layout file (`COMPANION_LAYOUT`) saying where; an unplaced preset skips
+instead of pressing a guess.
+
+| ID  | Press                | Device                                                | Module | §   |
+| --- | -------------------- | ----------------------------------------------------- | ------ | --- |
+| P1  | `toggle_playback` ×2 | running, then paused                                  | `timer_run_state` follows | §3.2 |
+| P2  | `navigate_next`      | different `current_session_id` and name               | `current_session_name` follows | §3.2 |
+| P3  | `add_time`           | `timer` +60 s                                         | `timer` matches | §3.2 |
+| P4  | `show_message`       | `view.message_text` = the preset's text, no stored id | `message_text` follows | §3.2 |
+| P5  | `blackout` ×2        | `is_blackout` on, then off                            | `is_blackout` follows | §3.2 |
+| P6  | `toggle_glow` ×2     | `is_glowing` on (blackout cleared), then off          | `is_glowing` follows | §3.2 |
 
 ## 6. Variable ↔ protocol mapping (assertion table)
 
@@ -434,8 +472,8 @@ Conformance for a release tag requires, in order:
       state machine in CI, no hardware.
 - [ ] T3 far-side suite green against the target build (vc149), same session.
 - [x] T2 device scenarios (S, B–E, G) green against vc149 — 2026-10-27, see §5.1.
-- [ ] T2 groups A and F green against vc149 (needs Companion reachable from the
-      harness host: press a button, assert the module caught up).
+- [x] T2 groups A and F green against vc149 (2026-10-27, Companion at `:8182`).
+- [ ] T2 group P green — needs the preset layout (`conformance/layout.json`).
 - [ ] T2 group G green or each failure written up with its device log excerpt.
 - [ ] Any spec/device divergence filed against the far side (doc regenerated at
       the shipping version code) rather than worked around in the module.
