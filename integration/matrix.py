@@ -19,15 +19,17 @@ from __future__ import annotations
 import asyncio
 import json
 import os
+import re
 import time
 import uuid
 from pathlib import Path
 from dataclasses import dataclass, field
 from typing import Any, Awaitable, Callable
 
+import adb
 from companion import CompanionClient
 from config import Config, Layout
-from device import DeviceClient
+from device import DeviceClient, Frame
 from program import restore_program, save_program, summarise
 from timeline import Check, Timeline
 
@@ -1256,3 +1258,223 @@ async def g5_soak(ctx: Ctx) -> None:
 			timeout=3.0,
 			label='module run state matches the device after the soak',
 		)
+
+
+# ---------------------------------------------------------------- adb-backed rows
+#
+# A2/A3/F4 need a shell on the display itself, so they skip (with a reason) when no
+# attached adb device matches the host under test. They run last: an app restart
+# wipes the loaded program, so each takes a backup and restores it afterwards.
+
+
+def _adb_for(ctx: Ctx) -> 'Adb':
+	handle, reason = adb.connect(ctx.cfg.device_host)
+	if handle is None:
+		raise SkipScenario(f'adb unavailable for {ctx.cfg.device_host}: {reason}')
+	return handle
+
+
+async def _wait_for(predicate: Callable[[], bool], timeout: float, interval: float = 0.25) -> bool:
+	deadline = time.monotonic() + timeout
+	while time.monotonic() < deadline:
+		if predicate():
+			return True
+		await asyncio.sleep(interval)
+	return predicate()
+
+
+async def _wait_ws(host: str, port: int, timeout: float = 90.0) -> Frame | None:
+	"""Poll the device until its WebSocket serves a hello_event again."""
+	deadline = time.monotonic() + timeout
+	while time.monotonic() < deadline:
+		probe = DeviceClient(host, port, timeout=3.0)
+		try:
+			return await probe.connect()
+		except Exception:  # noqa: BLE001 - not up yet
+			await asyncio.sleep(1.0)
+		finally:
+			await probe.close()
+	return None
+
+
+async def _wait_category(companion: CompanionClient, wanted: str, timeout: float) -> str:
+	deadline = time.monotonic() + timeout
+	category = ''
+	while time.monotonic() < deadline:
+		category = companion.category()
+		if category == wanted:
+			return category
+		await asyncio.sleep(0.5)
+	return category
+
+
+async def _compare_module_to_device(ctx: Ctx, label: str) -> None:
+	"""Every exact variable must equal a fresh snapshot of the device."""
+	assert ctx.companion is not None
+	await asyncio.sleep(1.0)
+	for name, expected_fn in EXACT_VARIABLES:
+		expected = expected_fn(await ctx.snapshot())
+		ok, seen = ctx.companion.wait_variable(name, expected, timeout=3.0)
+		ctx.check(f'{label}: {name} matches device', ok, f'expected {expected!r}, polls={seen[-3:]}')
+
+
+@scenario('A2', 'A', 'a display restart leaves the module reporting the new truth', '§1.3, §4', needs_companion=True)
+async def a2_app_restart(ctx: Ctx) -> None:
+	assert ctx.companion is not None
+	handle = _adb_for(ctx)
+	previous = await _current_session(ctx)
+	screen_id = (ctx.device.hello or {}).get('screen_id')
+	program = await save_program(ctx.device, ctx.out_dir, 'A2')
+	started = False
+	try:
+		handle.restart()
+		started = True
+		closed = await _wait_for(lambda: ctx.device.closed.is_set(), timeout=20)
+		ctx.check('the restart closed our connection', closed)
+
+		hello = await _wait_ws(ctx.cfg.device_host, ctx.cfg.device_port)
+		ctx.check('the device WebSocket came back', hello is not None, str(hello))
+		if hello is None:
+			return
+		await ctx.device.reconnect()
+		ctx.equal('same screen id after the restart', hello.get('screen_id'), screen_id)
+		ctx.equal('module and harness each saw one greeting', ctx.device.hello_count, 2)
+
+		program_now = await ctx.device.command('get_program')
+		ctx.equal('the restart left no loaded program', program_now.get('has_program'), False)
+
+		category = await _wait_category(ctx.companion, 'good', timeout=30)
+		ctx.equal('the module reconnects', category, 'good')
+		# The module must agree with the display, not with what it cached before.
+		await _module_var(ctx, 'total_sessions', '0', timeout=5.0)
+		await _module_var(ctx, 'total_messages', '0', timeout=5.0)
+	finally:
+		if not started:
+			try:
+				handle.start()
+			except Exception:
+				pass
+		ok, detail = await restore_program(ctx.device, program)
+		ctx.check('fixture program restored after the restart', ok, detail)
+		if previous:
+			await _show_session(ctx, previous)
+		try:
+			await _compare_module_to_device(ctx, 'after restore')
+		except Exception as exc:  # noqa: BLE001
+			ctx.warn('post-restore comparison ran', False, str(exc))
+
+
+@scenario('A3', 'A', 'the module notices an outage and recovers when the display returns', '§1.3', needs_companion=True)
+async def a3_outage(ctx: Ctx) -> None:
+	assert ctx.companion is not None
+	handle = _adb_for(ctx)
+	previous = await _current_session(ctx)
+	program = await save_program(ctx.device, ctx.out_dir, 'A3')
+	try:
+		handle.force_stop()
+		closed = await _wait_for(lambda: ctx.device.closed.is_set(), timeout=20)
+		ctx.check('our client saw the display disappear', closed)
+
+		category = ''
+		deadline = time.monotonic() + 30
+		while time.monotonic() < deadline:
+			category = ctx.companion.category()
+			if category != 'good':
+				break
+			await asyncio.sleep(0.5)
+		ctx.check('the module stops reporting good during the outage', category != 'good', f'category={category}')
+
+		await asyncio.sleep(3)  # a few reconnect attempts happen in this window
+		ctx.check('the module did not reconnect to a dead display', ctx.companion.category() != 'good')
+
+		handle.start()
+		hello = await _wait_ws(ctx.cfg.device_host, ctx.cfg.device_port)
+		ctx.check('the display came back', hello is not None, str(hello))
+		if hello is None:
+			return
+		await ctx.device.reconnect()
+		category = await _wait_category(ctx.companion, 'good', timeout=40)
+		ctx.equal('the module recovers after the outage', category, 'good')
+	finally:
+		try:
+			if not handle.pid():
+				handle.start()
+				await _wait_ws(ctx.cfg.device_host, ctx.cfg.device_port)
+		except Exception:
+			pass
+		ok, detail = await restore_program(ctx.device, program)
+		ctx.check('fixture program restored after the outage', ok, detail)
+		if previous:
+			await _show_session(ctx, previous)
+
+
+def _close_device_menu(handle: 'Adb', nodes: list['adb.UiNode']) -> bool:
+	"""Tap the menu's Close row; falls back to BACK. True when a Close label was found."""
+	for label in [n for n in nodes if n.text.strip().lower() == 'close']:
+		cx, cy = label.centre
+		for candidate in nodes:
+			x1, y1, x2, y2 = candidate.bounds
+			if candidate.clickable and candidate.enabled and x1 <= cx <= x2 and y1 <= cy <= y2:
+				handle.tap(*candidate.centre)
+				return True
+	handle.key('KEYCODE_BACK')
+	return False
+
+
+@scenario('F4', 'F', 'device-local touch and menu use are protocol-neutral', '§5', needs_companion=True)
+async def f4_local_ui(ctx: Ctx) -> None:
+	"""Touch the display itself; nothing about the protocol or the module may move.
+
+	The display has no local timer controls - its UI is identity and network
+	configuration only (the app source exposes `MenuScreen`/`IdleDisplay` settings,
+	and a hierarchy dump on the idle screen shows a single Menu affordance). So the
+	device-local action available to an automated run is a touch, which must be
+	invisible to the protocol: no state event, no program change, no module drift.
+	A human pressing something that starts a timer stays a manual step.
+	"""
+	assert ctx.companion is not None
+	handle = _adb_for(ctx)
+	await ctx.restore()
+	before = await ctx.snapshot()
+	mark = ctx.device.mark
+
+	size = handle.run('shell', 'wm', 'size')
+	width, height = 1920, 360
+	match = re.search(r'(\d+)x(\d+)', size)
+	if match:
+		width, height = int(match.group(1)), int(match.group(2))
+
+	# Centre of the display, then the chrome hotspot in the top-right corner.
+	handle.tap(width // 2, height // 2)
+	await asyncio.sleep(1.0)
+	handle.tap(width - 60, 40)
+	await asyncio.sleep(1.5)
+
+	# If the menu did open, close it so the device is left as found.
+	xml = handle.ui_xml()
+	if 'Device Information' in xml:
+		ctx.warn('the touch opened the device menu', True, 'closed again below')
+		_close_device_menu(handle, handle.ui_nodes(xml))
+		await asyncio.sleep(1.5)
+		closed = 'Device Information' not in handle.ui_xml()
+		ctx.check('the device menu was closed again', closed, 'still open')
+	handle.key('KEYCODE_BACK')
+
+	after = await ctx.snapshot()
+	ctx.equal('run state unchanged by local touch', DeviceClient.cc(after).get('timer_run_state'), DeviceClient.cc(before).get('timer_run_state'))
+	ctx.equal('current session unchanged by local touch', DeviceClient.cc(after).get('current_session_id'), DeviceClient.cc(before).get('current_session_id'))
+	ctx.equal('session count unchanged by local touch', len(DeviceClient.sessions(after)), len(DeviceClient.sessions(before)))
+	ctx.equal('message count unchanged by local touch', len(DeviceClient.message_list(after)), len(DeviceClient.message_list(before)))
+	ctx.equal('brightness unchanged by local touch', DeviceClient.settings(after).get('brightness'), DeviceClient.settings(before).get('brightness'))
+	events = ctx.device.event_kinds_since(mark)
+	ctx.check(
+		'no program or message event from local touch',
+		'program_changed_event' not in events and 'messages_status_event' not in events,
+		str(events),
+	)
+	await _module_var(
+		ctx,
+		'current_session_name',
+		str(DeviceClient.cc(after).get('current_session_name') or ''),
+		label='module still in step after local touch',
+	)

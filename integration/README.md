@@ -15,7 +15,11 @@ the integration test plan §4:
 
 - Python 3.11+ with `websockets` and `requests` (no pytest needed).
 - A CueTime device reachable on TCP 8081.
-- Optional: Companion 5.1+ reachable over HTTP for the module-facing groups (A, F).
+- Companion 5.1+ reachable over HTTP for the module-facing rows (A, F, P).
+- `adb` able to reach the **same** device for A2 (app restart), A3 (outage) and F4
+  (local touch) — `adb connect <device>:5555`. The serial is chosen by matching the
+  host under test against each attached device's IPv4 addresses, never guessed;
+  `CUETIME_ADB_SERIAL` overrides it. Without a match those three rows skip.
 
 ## Usage
 
@@ -68,6 +72,13 @@ Configuration (CLI flags win):
   `program-backup-<scenario>.json` in the run bundle first, restores it in a
   `finally`, re-selects the session that was current, and asserts the restore. They
   are registered last so a failed restore cannot take the other scenarios down.
+
+## Device restarts wipe the program
+
+A2/A3 restart the display app, and the app does **not** persist the loaded program
+across a restart (`has_program: false` comes back). Both rows therefore back the
+program up first and restore it afterwards from the run bundle, then re-select the
+session that was current and re-verify the module against the device.
 
 ## Safety
 

@@ -59,6 +59,22 @@ class DeviceClient:
 		self.hello = hello
 		return hello
 
+	async def reconnect(self) -> Frame:
+		"""Drop the socket and connect again, keeping the frame history.
+
+		Used by the restart/outage scenarios: the device goes away and comes back,
+		and the harness must observe both sides without losing its timeline.
+		"""
+		await self.close()
+		self._pending.clear()
+		self._new_frame = asyncio.Event()
+		self.closed.clear()
+		return await self.connect()
+
+	@property
+	def hello_count(self) -> int:
+		return sum(1 for _, frame in self.frames if frame.get('type') == 'hello_event')
+
 	async def close(self) -> None:
 		if self._reader is not None:
 			self._reader.cancel()
