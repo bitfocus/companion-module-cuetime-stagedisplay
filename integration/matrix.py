@@ -18,14 +18,17 @@ from __future__ import annotations
 
 import asyncio
 import json
+import os
 import time
 import uuid
+from pathlib import Path
 from dataclasses import dataclass, field
 from typing import Any, Awaitable, Callable
 
 from companion import CompanionClient
 from config import Config, Layout
 from device import DeviceClient
+from program import restore_program, save_program, summarise
 from timeline import Check, Timeline
 
 def _neighbour_name(status: dict[str, Any], direction: str) -> str:
@@ -83,6 +86,7 @@ class Ctx:
 	checks: list[Check] = field(default_factory=list)
 	scenario_id: str = ''
 	layout: Layout | None = None
+	out_dir: Path = Path('.')
 
 	# ---- assertions ----
 
@@ -126,6 +130,9 @@ class Ctx:
 		except Exception:
 			pass
 
+
+# A soak is long by nature; the release gate raises this via CUETIME_SOAK_SECONDS.
+_SOAK_DEFAULT_SECONDS = 60.0
 
 ScenarioFn = Callable[[Ctx], Awaitable[None]]
 
@@ -198,6 +205,23 @@ async def _show_session(ctx: Ctx, session_id: str) -> bool:
 def _first_message(status: dict[str, Any]) -> dict[str, Any] | None:
 	messages = DeviceClient.message_list(status)
 	return messages[0] if messages else None
+
+
+async def _module_var(ctx: Ctx, name: str, expected: str, timeout: float = 2.0, label: str | None = None) -> None:
+	"""Assert a module variable, when a Companion is attached to ask."""
+	if ctx.companion is None:
+		ctx.warn(f'{name} not verified (no Companion attached)', True, 'skipped')
+		return
+	ok, seen = ctx.companion.wait_variable(name, expected, timeout=timeout)
+	ctx.check(label or f'module {name} == {expected!r}', ok, f'polls={seen[-3:]}')
+
+
+async def _pick_pausable(ctx: Ctx) -> str | None:
+	"""A session the timer commands accept (a wall clock rejects most of them)."""
+	for session in DeviceClient.sessions(await ctx.snapshot()):
+		if session.get('mode') in ('countdown', 'countup'):
+			return str(session.get('id'))
+	return None
 
 
 async def _press(ctx: Ctx, preset: str) -> None:
@@ -871,3 +895,364 @@ async def p6_press_toggle_glow(ctx: Ctx) -> None:
 	ctx.check('module reports glow', ok, f'polls={seen[-3:]}')
 	await _press(ctx, 'toggle_glow')
 	ctx.equal('device glow off', DeviceClient.cc(await ctx.snapshot()).get('is_glowing'), False)
+
+
+# ---------------------------------------------------------------- remaining rows
+#
+# The program-replacing scenarios come last on purpose: each backs the loaded
+# program up into the run bundle and restores it in a `finally`, but a run that
+# dies mid-restore must not take the earlier scenarios down with it.
+
+
+@scenario('A4', 'A', 'the empty-program state left by delete_program', '§3.6, §5')
+async def a4_empty_program(ctx: Ctx) -> None:
+	await ctx.restore()
+	previous = await _current_session(ctx)
+	program = await save_program(ctx.device, ctx.out_dir, 'A4')
+	try:
+		ok, resp = await ctx.device.command_ok('delete_program', program_id=str(program.get('program_id')))
+		ctx.check('delete_program acked', ok, f'code={resp.get("code")} {resp.get("message") or ""}'.strip())
+		await asyncio.sleep(1.0)
+
+		status = await ctx.snapshot()
+		ctx.equal('no sessions remain', len(DeviceClient.sessions(status)), 0)
+		ctx.equal('no messages remain', len(DeviceClient.message_list(status)), 0)
+		ctx.equal('device is idle', DeviceClient.cc(status).get('timer_run_state'), 'idle')
+		ctx.equal('no current session', DeviceClient.cc(status).get('current_session_id') or '', '')
+
+		# vc147: the ad-hoc text form needs no program; the id form looks one up.
+		ok, resp = await ctx.device.command_ok('show_message', text='Integration empty program')
+		ctx.check('ad-hoc text accepted with an empty program', ok, f'code={resp.get("code")}')
+		await asyncio.sleep(0.4)
+		ctx.equal(
+			'ad-hoc text is on screen',
+			DeviceClient.view(await ctx.snapshot()).get('message_text'),
+			'Integration empty program',
+		)
+		await ctx.device.command('hide_message')
+
+		resp = await ctx.device.command('show_message', message_id='integration-not-a-message')
+		ctx.equal('id form rejected on an empty program', resp.get('type'), 'error_response')
+		ctx.equal('id form code is INVALID_PARAMETER', resp.get('code'), 'INVALID_PARAMETER')
+
+		await _module_var(ctx, 'total_sessions', '0')
+		await _module_var(ctx, 'total_messages', '0')
+	finally:
+		ok, detail = await restore_program(ctx.device, program)
+		ctx.check('fixture program restored', ok, detail)
+		if previous:
+			await _show_session(ctx, previous)
+		await asyncio.sleep(0.5)
+		ctx.equal(
+			'restored session count',
+			len(DeviceClient.sessions(await ctx.snapshot())),
+			len(program.get('sessions') or []),
+		)
+
+
+@scenario('B5', 'B', 'reset_current_session and reset_program_elapsed_timer zero their clocks', '§3.2')
+async def b5_resets(ctx: Ctx) -> None:
+	session_id = await _pick_pausable(ctx)
+	if session_id is None:
+		raise SkipScenario('no countdown/countup session in the program')
+	await ctx.restore()
+	await _show_session(ctx, session_id)
+	await ctx.device.command('start_session', session_id=session_id)
+	await asyncio.sleep(1.6)
+	before = await ctx.snapshot()
+	elapsed_before = DeviceClient.cc(before).get('elapsed_time') or 0
+	program_before = DeviceClient.cc(before).get('program_elapsed_time') or 0
+	ctx.check('elapsed advanced before the reset', elapsed_before >= 1000, f'{elapsed_before} ms')
+
+	mark = ctx.device.mark
+	ok, resp = await ctx.device.command_ok('reset_current_session')
+	ctx.check('reset_current_session acked', ok, f'code={resp.get("code")}')
+	await asyncio.sleep(0.6)
+	after = await ctx.snapshot()
+	ctx.equal('session is paused after the reset', DeviceClient.cc(after).get('timer_run_state'), 'paused')
+	elapsed_after = DeviceClient.cc(after).get('elapsed_time') or 0
+	ctx.check('elapsed_time restarted from zero', elapsed_after < 1000, f'{elapsed_before} -> {elapsed_after} ms')
+	ctx.check(
+		'program_changed_event pushed for the reset',
+		'program_changed_event' in ctx.device.event_kinds_since(mark),
+		str(ctx.device.event_kinds_since(mark)),
+	)
+
+	ok, resp = await ctx.device.command_ok('reset_program_elapsed_timer')
+	ctx.check('reset_program_elapsed_timer acked', ok, f'code={resp.get("code")}')
+	await asyncio.sleep(0.5)
+	program_after = DeviceClient.cc(await ctx.snapshot()).get('program_elapsed_time') or 0
+	ctx.check('program_elapsed_time reset to zero', program_after < 2000, f'{program_before} -> {program_after} ms')
+	await ctx.restore()
+
+
+@scenario('C4', 'C', 'delete_all_messages and delete_all_sessions empty the program', '§3.2')
+async def c4_delete_all(ctx: Ctx) -> None:
+	await ctx.restore()
+	previous = await _current_session(ctx)
+	program = await save_program(ctx.device, ctx.out_dir, 'C4')
+	try:
+		ok, resp = await ctx.device.command_ok('delete_all_messages')
+		ctx.check('delete_all_messages acked', ok, f'code={resp.get("code")}')
+		await asyncio.sleep(0.6)
+		ctx.equal('no messages remain', len(DeviceClient.message_list(await ctx.snapshot())), 0)
+		await _module_var(ctx, 'total_messages', '0')
+
+		ok, resp = await ctx.device.command_ok('delete_all_sessions')
+		ctx.check('delete_all_sessions acked', ok, f'code={resp.get("code")}')
+		await asyncio.sleep(0.8)
+		status = await ctx.snapshot()
+		ctx.equal('no sessions remain', len(DeviceClient.sessions(status)), 0)
+		ctx.equal('device is idle', DeviceClient.cc(status).get('timer_run_state'), 'idle')
+		await _module_var(ctx, 'total_sessions', '0')
+	finally:
+		ok, detail = await restore_program(ctx.device, program)
+		ctx.check('fixture program restored', ok, detail)
+		if previous:
+			await _show_session(ctx, previous)
+		await asyncio.sleep(0.5)
+		ctx.equal(
+			'restored message count',
+			len(DeviceClient.message_list(await ctx.snapshot())),
+			len(program.get('messages') or []),
+		)
+
+
+@scenario('D7', 'D', 'time-up display off gates the cue but not the session flash window', '§3.2, §4.5')
+async def d7_time_up_display_off(ctx: Ctx) -> None:
+	original = DeviceClient.settings(await ctx.snapshot()).get('is_time_up_display') is True
+	ok, resp = await ctx.device.command_ok('set_is_time_up_display', enabled=False)
+	ctx.check('time-up display disabled', ok, f'code={resp.get("code")}')
+	session_id = f'integration-{uuid.uuid4().hex[:8]}'
+	previous = await _ensure_current(ctx)
+	try:
+		ok, resp = await ctx.device.command_ok(
+			'add_session',
+			session_id=session_id,
+			name='Integration Time-Up Off',
+			mode='countdown',
+			seconds=3,
+			flash_start_time_seconds=2,
+			flash_length_seconds=2,
+		)
+		ctx.check('short countdown created', ok, f'code={resp.get("code")}')
+		if not ok:
+			return
+		await _show_session(ctx, session_id)
+		await ctx.device.command('start_session', session_id=session_id)
+		# Remaining hits 2 s at ~1 s elapsed: inside the window, before zero.
+		await asyncio.sleep(1.6)
+		view = DeviceClient.view(await ctx.snapshot())
+		ctx.equal('session flash window still reports', view.get('is_time_up_flashing'), True)
+		# Past zero the cue is gated off by the setting.
+		await asyncio.sleep(2.9)
+		view = DeviceClient.view(await ctx.snapshot())
+		ctx.equal('time-up cue is gated off', view.get('is_time_up_flashing'), False)
+		ctx.equal('message flash stays false', view.get('is_flashing'), False)
+	finally:
+		await ctx.restore()
+		await ctx.device.command_ok('delete_session', session_id=session_id)
+		if previous:
+			await _show_session(ctx, previous)
+		await ctx.device.command_ok('set_is_time_up_display', enabled=original)
+		await asyncio.sleep(0.3)
+		ctx.equal(
+			'time-up display setting restored',
+			DeviceClient.settings(await ctx.snapshot()).get('is_time_up_display'),
+			original,
+		)
+
+
+@scenario('E3', 'E', 'show_idle takes a showing message off the glass', '§3.2')
+async def e3_show_idle(ctx: Ctx) -> None:
+	message = _first_message(await ctx.snapshot())
+	if message is None:
+		raise SkipScenario('no messages in the program')
+	await ctx.restore()
+	await ctx.device.command('show_message', message_id=str(message.get('id')))
+	await asyncio.sleep(0.4)
+	showing = DeviceClient.view(await ctx.snapshot()).get('message_text') or ''
+	ctx.check('message is showing first', str(showing) != '', str(showing))
+
+	ok, resp = await ctx.device.command_ok('show_idle')
+	ctx.check('show_idle acked', ok, f'code={resp.get("code")}')
+	await asyncio.sleep(0.5)
+	view = DeviceClient.view(await ctx.snapshot())
+	ctx.equal('message text cleared', view.get('message_text') or '', '')
+	ctx.equal('message flash off', view.get('is_flashing'), False)
+	await _module_var(ctx, 'message_text', '')
+
+
+@scenario('E4', 'E', 'set_brightness round-trips and rejects out-of-range values', '§4.6')
+async def e4_brightness(ctx: Ctx) -> None:
+	original = DeviceClient.settings(await ctx.snapshot()).get('brightness')
+	ok, resp = await ctx.device.command_ok('set_brightness', brightness=20)
+	ctx.check('set_brightness 20 acked', ok, f'code={resp.get("code")}')
+	await asyncio.sleep(0.4)
+	ctx.equal('brightness is 20', DeviceClient.settings(await ctx.snapshot()).get('brightness'), 20)
+
+	resp = await ctx.device.command('set_brightness', brightness=150)
+	ctx.equal('out-of-range brightness rejected', resp.get('code'), 'INVALID_PARAMETER')
+
+	if original is not None:
+		ok, _ = await ctx.device.command_ok('set_brightness', brightness=int(original))
+		ctx.check('brightness restore acked', ok)
+		await asyncio.sleep(0.4)
+		ctx.equal('brightness back to the original value', DeviceClient.settings(await ctx.snapshot()).get('brightness'), original)
+
+
+@scenario('F3', 'F', 'send_program replaces the program and is refused while a timer runs', '§3.6')
+async def f3_send_program(ctx: Ctx) -> None:
+	await ctx.restore()
+	previous = await _current_session(ctx)
+	program = await save_program(ctx.device, ctx.out_dir, 'F3')
+	try:
+		modified = json.loads(json.dumps(program))
+		sessions = modified.get('sessions') or []
+		if not sessions:
+			raise SkipScenario('the loaded program has no sessions to rename')
+		renamed = 'Integration Renamed'
+		sessions[0]['name'] = renamed
+
+		mark = ctx.device.mark
+		ok, resp = await ctx.device.command_ok('send_program', program=modified)
+		ctx.check('send_program acked', ok, f'code={resp.get("code")} {resp.get("message") or ""}'.strip())
+		event = await ctx.device.wait(
+			lambda f: f.get('type') == 'program_changed_event', timeout=3.0, start=mark
+		)
+		ctx.check('program_changed_event pushed', event is not None)
+		status = await ctx.snapshot()
+		names = [str(s.get('name')) for s in DeviceClient.sessions(status)]
+		ctx.check('renamed session is loaded', renamed in names, str(names))
+		await _module_var(ctx, 'total_sessions', str(len(names)))
+
+		# A different program_id while the timer runs is DEVICE_BUSY (the same id
+		# would be allowed, which is why the clone gets its own id).
+		other = json.loads(json.dumps(modified))
+		other['program_id'] = f'{program.get("program_id")}-busy'
+		# A reload may have left the display with no current session, and an idle
+		# timer is not busy — select and start one first, and prove it is running.
+		await _show_session(ctx, str(sessions[0].get('id')))
+		await ctx.device.command('start_session')
+		await asyncio.sleep(0.6)
+		ctx.equal(
+			'timer is running before the busy probe',
+			DeviceClient.cc(await ctx.snapshot()).get('timer_run_state'),
+			'running',
+		)
+		resp = await ctx.device.command('send_program', program=other)
+		ctx.equal('a new program is refused while running', resp.get('code'), 'DEVICE_BUSY')
+		await ctx.device.command('pause_session')
+	finally:
+		ok, detail = await restore_program(ctx.device, program)
+		ctx.check('fixture program restored', ok, detail)
+		if previous:
+			await _show_session(ctx, previous)
+		await asyncio.sleep(0.5)
+		names = [str(s.get('name')) for s in DeviceClient.sessions(await ctx.snapshot())]
+		ctx.check(
+			'original session names are back',
+			names == [str(s.get('name')) for s in (program.get('sessions') or [])],
+			str(names),
+		)
+
+
+@scenario('G4', 'G', 'every reply is correlated and request ids are not reused', '§2, §3.3')
+async def g4_request_id_audit(ctx: Ctx) -> None:
+	mark = ctx.device.mark
+	expected_errors = {'audit-bad-command': 'INVALID_COMMAND', 'audit-bad-brightness': 'INVALID_PARAMETER'}
+	probes = [
+		({'type': 'request_status'}, 'audit-status'),
+		({'type': 'request_view_status'}, 'audit-view'),
+		({'type': 'request_settings_status'}, 'audit-settings'),
+		({'type': 'request_sessions_status'}, 'audit-sessions'),
+		({'type': 'not_a_real_command'}, 'audit-bad-command'),
+		({'type': 'set_brightness', 'brightness': 150}, 'audit-bad-brightness'),
+	]
+	for command, rid in probes:
+		resp = await ctx.device.send(command, request_id=rid)
+		ctx.equal(f'{rid} echoed its request_id', resp.get('request_id'), rid)
+		if rid in expected_errors:
+			ctx.equal(f'{rid} code', resp.get('code'), expected_errors[rid])
+
+	# Two frames on the wire carrying the same request_id.
+	dup = 'audit-duplicate'
+	dup_mark = ctx.device.mark
+	await ctx.device.send_nowait({'type': 'request_view_status'}, request_id=dup)
+	await ctx.device.send_nowait({'type': 'request_view_status'}, request_id=dup)
+	await asyncio.sleep(0.8)
+	dup_replies = [f for f in ctx.device.responses_since(dup_mark) if f.get('request_id') == dup]
+	# Observation, not a pass/fail: this device answers both frames and does not
+	# reject a repeated id, so "duplicate request detection" is not a WS-JSON feature.
+	ctx.warn(
+		'repeated request_id is answered, not rejected',
+		len(dup_replies) >= 1,
+		f'{len(dup_replies)} replies for one id: {[f.get("type") for f in dup_replies]}',
+	)
+
+	responses = ctx.device.responses_since(mark)
+	ids = [str(f.get('request_id')) for f in responses if f.get('request_id')]
+	sent = {rid for _, rid in probes} | {dup}
+	stray = sorted(set(ids) - sent)
+	ctx.check('no reply to an id we did not send', stray == [], str(stray))
+	repeated = sorted({rid for rid in ids if ids.count(rid) > 1} - {dup})
+	ctx.check('no request_id answered twice', repeated == [], str(repeated))
+	ctx.check('every probe got a reply', sent <= set(ids), f'missing: {sorted(sent - set(ids))}')
+	errors = [f for f in responses if f.get('type') == 'error_response']
+	ctx.check(
+		'only the two expected error replies',
+		len(errors) == len(expected_errors),
+		f'{len(errors)} error replies: {[f.get("code") for f in errors]}',
+	)
+
+
+@scenario('G5', 'G', 'soak: repeated commands keep the device and the module in step', '')
+async def g5_soak(ctx: Ctx) -> None:
+	seconds = float(os.environ.get('CUETIME_SOAK_SECONDS', _SOAK_DEFAULT_SECONDS))
+	session_id = await _pick_pausable(ctx)
+	if session_id is None:
+		raise SkipScenario('no countdown/countup session in the program')
+	await ctx.restore()
+	await _show_session(ctx, session_id)
+	message = _first_message(await ctx.snapshot())
+
+	errors: list[tuple[int, str]] = []
+	unanswered = 0
+	iterations = 0
+	deadline = time.monotonic() + seconds
+	while time.monotonic() < deadline:
+		iterations += 1
+		command = 'start_session' if iterations % 2 else 'pause_session'
+		try:
+			resp = await ctx.device.command(command)
+		except Exception as exc:  # noqa: BLE001 - a dropped connection is the finding
+			unanswered += 1
+			errors.append((iterations, type(exc).__name__))
+			break
+		if resp.get('type') == 'error_response':
+			errors.append((iterations, str(resp.get('code'))))
+		if iterations % 5 == 0 and message is not None:
+			await ctx.device.command('show_message', message_id=str(message.get('id')))
+			await ctx.device.command('hide_message')
+		if iterations % 10 == 0:
+			probe = await ctx.device.snapshot()
+			if not isinstance(probe.get('control_center'), dict):
+				errors.append((iterations, 'no-snapshot'))
+		await asyncio.sleep(1.0)
+
+	ctx.check(f'{iterations} commands over {seconds:.0f}s kept the device answering', unanswered == 0, str(errors[:3]))
+	ctx.check('no error_response during the soak', len(errors) == 0, str(errors[:3]))
+	ctx.check('the connection stayed open for the whole soak', not ctx.device.closed.is_set())
+
+	await ctx.restore()
+	await asyncio.sleep(1.0)
+	status = await ctx.snapshot()
+	ctx.equal('device is paused at the end', DeviceClient.cc(status).get('timer_run_state'), 'paused')
+	if ctx.companion is not None:
+		await _module_var(
+			ctx,
+			'timer_run_state',
+			str(DeviceClient.cc(status).get('timer_run_state') or 'idle'),
+			timeout=3.0,
+			label='module run state matches the device after the soak',
+		)

@@ -93,6 +93,7 @@ async def run_one(
 		timeline=timeline,
 		scenario_id=scenario.id,
 		layout=layout,
+		out_dir=Path(cfg.output_dir),
 	)
 	try:
 		await device.connect()

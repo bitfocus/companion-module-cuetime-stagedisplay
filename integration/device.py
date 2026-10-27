@@ -122,6 +122,9 @@ class DeviceClient:
 	async def wait_event(self, kind: str, timeout: float | None = None, start: int | None = None) -> Frame | None:
 		return await self.wait(lambda f: f.get('type') == kind, timeout=timeout, start=start)
 
+	def responses_since(self, start: int) -> list[Frame]:
+		return [f for _, f in self.frames[start:] if str(f.get('type', '')).endswith('_response')]
+
 	@property
 	def mark(self) -> int:
 		"""Index to pass as ``start`` to only consider frames from now on."""
@@ -153,6 +156,18 @@ class DeviceClient:
 			raise DeviceError(f'no response to {command.get("type")} within timeout') from exc
 		finally:
 			self._pending.pop(rid, None)
+
+	async def send_nowait(self, command: Frame, request_id: str | None = None) -> str:
+		"""Send a frame without waiting for its reply.
+
+		Used by the request-id audit, which needs two frames on the wire with the same
+		id; awaiting them through ``send`` would correlate the wrong reply.
+		"""
+		if self._ws is None:
+			raise DeviceError('not connected')
+		rid = request_id or self._next_id()
+		await self._ws.send(json.dumps({**command, 'request_id': rid}))
+		return rid
 
 	async def command(self, type_: str, **fields: Any) -> Frame:
 		return await self.send({'type': type_, **fields})

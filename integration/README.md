@@ -53,11 +53,21 @@ Configuration (CLI flags win):
 | `run.json` | device `hello_event` (version code/name, screen id), Companion connection, every scenario and check |
 | `timeline-<scenario>.jsonl` | every frame the harness client received, in arrival order |
 | `variables-<scenario>.jsonl` | module-variable polls taken during the scenario |
+| `program-backup-<scenario>.json` | the loaded program, saved before a scenario replaces or empties it |
 | `junit.xml` | machine-readable results |
 | `notes.md` | summary plus failures, for pasting into an issue |
 
 `results/` is git-ignored. When a run is the evidence for a release, copy its
 `run.json` + `notes.md` into `docs/integration-runs/<tag>/` and commit those.
+
+## Long-running scenarios
+
+- **G5 soak** runs for `CUETIME_SOAK_SECONDS` (default 60). The release gate is the
+  full length: `CUETIME_SOAK_SECONDS=600 python3 integration/run_integration.py --only G5`.
+- **A4, C4 and F3** replace or empty the loaded program. Each saves it to
+  `program-backup-<scenario>.json` in the run bundle first, restores it in a
+  `finally`, re-selects the session that was current, and asserts the restore. They
+  are registered last so a failed restore cannot take the other scenarios down.
 
 ## Safety
 
