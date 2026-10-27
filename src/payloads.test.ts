@@ -620,3 +620,75 @@ describe('entering the program from idle', () => {
 		expect(buildShowSession(idleWithProgram, 0).ok).toBe(false)
 	})
 })
+
+describe('flash window validation', () => {
+	// The device enforces these for countdown sessions only, and rejects with
+	// "Flash length must be ≤ flash start time" / "Flash start time must be ≤
+	// session duration". Refusing locally explains the problem at the control that
+	// caused it instead of leaving a warning in the log.
+	it('refuses a countdown whose flash length exceeds its flash start time', () => {
+		const built = buildAddSession({ mode: 'countdown', seconds: 60, flashStartSeconds: 30, flashLengthSeconds: 31 })
+		expect(built.ok).toBe(false)
+		if (!built.ok) expect(built.reason).toContain('cannot exceed the flash start time')
+	})
+
+	it('refuses a countdown whose flash starts after the session ends', () => {
+		const built = buildAddSession({ mode: 'countdown', seconds: 30, flashStartSeconds: 31, flashLengthSeconds: 5 })
+		expect(built.ok).toBe(false)
+		if (!built.ok) expect(built.reason).toContain('cannot exceed the session duration')
+	})
+
+	it('accepts the boundary values the device accepts', () => {
+		expect(buildAddSession({ mode: 'countdown', seconds: 30, flashStartSeconds: 30, flashLengthSeconds: 30 }).ok).toBe(
+			true,
+		)
+		expect(buildAddSession({ mode: 'countdown', seconds: 60, flashStartSeconds: 30, flashLengthSeconds: 30 }).ok).toBe(
+			true,
+		)
+		// Length is deliberately not compared with the duration: this fires entirely on screen.
+		expect(buildAddSession({ mode: 'countdown', seconds: 60, flashStartSeconds: 55, flashLengthSeconds: 30 }).ok).toBe(
+			true,
+		)
+	})
+
+	it('does not apply the rules to count-up or time-of-day, which the device does not enforce', () => {
+		expect(buildAddSession({ mode: 'countup', seconds: 10, flashStartSeconds: 5, flashLengthSeconds: 10 }).ok).toBe(
+			true,
+		)
+		expect(
+			buildAddSession({ mode: 'time_of_day', offset: '12:00:00', flashStartSeconds: 5, flashLengthSeconds: 10 }).ok,
+		).toBe(true)
+	})
+
+	it('checks the session as an update will leave it, not just the fields in the frame', () => {
+		const state = stateFrom(
+			sessionsEvent([
+				{
+					id: 's1',
+					index: 0,
+					name: 'Countdown',
+					mode: 'countdown',
+					duration: 60,
+					flash_start_time_seconds: 30,
+					flash_length_seconds: 10,
+					is_current: true,
+				},
+			]),
+			controlCenterEvent({ timer_run_state: 'paused', current_session_id: 's1' }),
+		)
+
+		// Raising the length past the stored start is refused, even though only the
+		// length was sent.
+		const tooLong = buildUpdateSession(state, { mode: MODE_KEEP, flashLengthSeconds: 40 })
+		expect(tooLong.ok).toBe(false)
+		if (!tooLong.ok) expect(tooLong.reason).toContain('cannot exceed the flash start time')
+
+		// Shortening the duration under the stored start is refused too.
+		const tooShort = buildUpdateSession(state, { mode: MODE_KEEP, seconds: '20' })
+		expect(tooShort.ok).toBe(false)
+		if (!tooShort.ok) expect(tooShort.reason).toContain('cannot exceed the session duration')
+
+		// Moving both together is fine.
+		expect(buildUpdateSession(state, { mode: MODE_KEEP, seconds: '20', flashStartSeconds: 15 }).ok).toBe(true)
+	})
+})

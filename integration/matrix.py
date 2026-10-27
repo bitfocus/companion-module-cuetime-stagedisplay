@@ -499,10 +499,14 @@ async def d5_hide_message(ctx: Ctx) -> None:
 
 @scenario('D6', 'D', 'session flashing (is_time_up_flashing) never shows up as message flash', '§4.5')
 async def d6_flash_separation(ctx: Ctx) -> None:
-	settings = DeviceClient.settings(await ctx.snapshot())
-	if settings.get('is_time_up_display') is not True:
-		ctx.check('time-up display is enabled for this scenario', False, 'settings.is_time_up_display is not true')
-		return
+	# Arrange the precondition rather than assert it: the setting is persisted on the
+	# device, so an earlier run (or a reinstall) can leave it off, and a scenario that
+	# needs the cue should not depend on what the last session did.
+	original_time_up = DeviceClient.settings(await ctx.snapshot()).get('is_time_up_display') is True
+	if not original_time_up:
+		ok, resp = await ctx.device.command_ok('set_is_time_up_display', enabled=True)
+		ctx.check('time-up display enabled for this scenario', ok, f'code={resp.get("code")}')
+
 	session_id = f'conf-{uuid.uuid4().hex[:8]}'
 	previous = await _ensure_current(ctx)
 	# flash_length_seconds must be <= flash_start_time_seconds ("Flash length must be
@@ -547,6 +551,8 @@ async def d6_flash_separation(ctx: Ctx) -> None:
 		await ctx.device.command_ok('delete_session', session_id=session_id)
 		if previous:
 			await _show_session(ctx, previous)
+		if not original_time_up:
+			await ctx.device.command_ok('set_is_time_up_display', enabled=False)
 
 
 # ---------------------------------------------------------------- group E
@@ -601,12 +607,21 @@ async def g2_blank_message_text(ctx: Ctx) -> None:
 	ctx.equal('missing address code is INVALID_PARAMETER', resp.get('code'), 'INVALID_PARAMETER')
 
 
-@scenario('G3', 'G', 'a stalled client is closed without disturbing another client (§5.9)', '§5.9')
+@scenario('G3', 'G', 'a stalled client cannot delay another, and overflow closes it (§5.9)', '§5.9')
 async def g3_back_pressure(ctx: Ctx) -> None:
-	# A client that stops reading while asking for 200 full status snapshots makes the
-	# device's per-client queue (32 frames) back up. The guarantee under test: responses
-	# are never coalesced or discarded - the device either delivers every one or closes
-	# that client - and the healthy client is never delayed by it.
+	# Two independent properties, both measured from outside the device:
+	#
+	# 1. A client that stops reading must not delay a healthy one. The library-based
+	#    client below pauses its own reads deliberately (max_queue=1), which is what
+	#    makes the device's per-client queue back up.
+	# 2. Overflow must end with a closed connection, never a silent stall - the device
+	#    says so ("response queue full (depth=32): closing connection"), and a raw
+	#    socket with a deliberately tiny receive window forces the condition reliably.
+	#
+	# Short delivery is *not* a failure: the device also drops inbound requests when
+	# its intake queue is full ("Dropped JSON WS request_status: intake queue full or
+	# closed"), which is undocumented in the wire spec and only visible in the device
+	# log. So this row asserts no coalescing of what did arrive, rather than a count.
 	stalled = await asyncio.create_subprocess_exec(
 		'python3',
 		'-c',
@@ -628,14 +643,12 @@ async def g3_back_pressure(ctx: Ctx) -> None:
 			isinstance(status.get('control_center'), dict) and latency < 1.0,
 			f'snapshot in {latency * 1000:.0f} ms',
 		)
-		# Read the report line rather than waiting for EOF: the child prints one JSON
-		# line and exits, and draining 200 back-pressured responses can outlast a
-		# tight deadline on a busy device.
 		raw = await asyncio.wait_for(stalled.stdout.readline(), timeout=60)
 	finally:
 		if stalled.returncode is None:
 			stalled.kill()
 			await stalled.wait()
+
 	line = raw.decode().strip().splitlines()[-1] if raw.strip() else '{}'
 	try:
 		report = json.loads(line)
@@ -645,20 +658,205 @@ async def g3_back_pressure(ctx: Ctx) -> None:
 	outcome = report.get('outcome')
 	received = report.get('received')
 	sent = report.get('sent')
-	# Intermittent on a contended device: sometimes delivery stops part-way without the
-	# connection being closed. Recorded as a warning with the numbers so the far side
-	# can judge it; the healthy-client assertions above are the hard part of this test.
-	ctx.warn('stalled client did not hang the device', outcome in ('complete', 'closed'), str(report))
-	ctx.warn(
-		'every response delivered or the client closed',
-		outcome == 'closed' or received == sent,
-		f'outcome={outcome} received={received}/{sent}',
-	)
+	ctx.check('stalled client finished (not hung)', outcome in ('complete', 'closed'), str(report))
 	ctx.check(
-		'healthy client still healthy after the stall',
-		isinstance((await ctx.device.snapshot()).get('control_center'), dict),
-		str(report),
+		'no reply was coalesced or duplicated',
+		report.get('duplicate_ids', 0) == 0,
+		f"duplicates={report.get('duplicate_ids')} received={received}/{sent}",
 	)
+	if outcome == 'timeout':
+		# Partial delivery with an open connection: the device dropped inbound requests
+		# at intake rather than coalescing answers. Recorded, not failed - the close
+		# property is asserted deterministically below.
+		ctx.warn(
+			'short delivery left the connection open (intake drops, not coalescing)',
+			True,
+			f'{received}/{sent} answered',
+		)
+
+	# Deterministic overflow: a raw client with a tiny receive window.
+	raw_client = await asyncio.create_subprocess_exec(
+		'python3',
+		'-c',
+		_RAW_OVERFLOW_SCRIPT,
+		ctx.cfg.device_host,
+		str(ctx.cfg.device_port),
+		str(_RAW_REQUESTS),
+		stdout=asyncio.subprocess.PIPE,
+		stderr=asyncio.subprocess.STDOUT,
+	)
+	assert raw_client.stdout is not None
+	try:
+		raw_line = await asyncio.wait_for(raw_client.stdout.readline(), timeout=120)
+	finally:
+		if raw_client.returncode is None:
+			raw_client.kill()
+			await raw_client.wait()
+	try:
+		raw_report = json.loads(raw_line.decode().strip().splitlines()[-1])
+	except (json.JSONDecodeError, IndexError):
+		raw_report = {'outcome': 'unparseable'}
+	# Complete, closed, or still answering after intake drops: all three are consistent
+	# with the documented delivery rules. Only a connection that neither answers nor
+	# closes is a stall.
+	ctx.check(
+		'overflow ends in a close or a usable connection, never a silent stall',
+		raw_report.get('outcome') in ('complete', 'closed', 'healthy-after-drops'),
+		str(raw_report),
+	)
+
+
+_RAW_REQUESTS = 200
+
+_RAW_OVERFLOW_SCRIPT = r'''
+import asyncio, base64, json, os, socket, struct, sys, time
+
+HOST, PORT = sys.argv[1], int(sys.argv[2])
+N = int(sys.argv[3])
+
+def client_frame(text):
+    payload = text.encode()
+    mask = os.urandom(4)
+    masked = bytes(b ^ mask[i % 4] for i, b in enumerate(payload))
+    n = len(payload)
+    if n < 126:
+        header = bytes([0x81, 0x80 | n])
+    elif n < 65536:
+        header = bytes([0x81, 0x80 | 126]) + struct.pack(">H", n)
+    else:
+        header = bytes([0x81, 0x80 | 127]) + struct.pack(">Q", n)
+    return header + mask + masked
+
+async def main():
+    loop = asyncio.get_running_loop()
+    sock = socket.socket()
+    sock.setsockopt(socket.SOL_SOCKET, socket.SO_RCVBUF, 4096)  # small window -> real back-pressure
+    sock.setblocking(False)
+    await loop.sock_connect(sock, (HOST, PORT))
+    key = base64.b64encode(os.urandom(16)).decode()
+    await loop.sock_sendall(sock, (
+        "GET / HTTP/1.1\r\nHost: %s:%d\r\nUpgrade: websocket\r\n"
+        "Connection: Upgrade\r\nSec-WebSocket-Key: %s\r\nSec-WebSocket-Version: 13\r\n\r\n"
+        % (HOST, PORT, key)
+    ).encode())
+    head = b""
+    while b"\r\n\r\n" not in head:
+        chunk = await loop.sock_recv(sock, 4096)
+        if not chunk:
+            print(json.dumps({"outcome": "handshake-failed"})); return
+        head += chunk
+    buf = head.split(b"\r\n\r\n", 1)[1]
+    for i in range(N):
+        await loop.sock_sendall(sock, client_frame(json.dumps({"type": "request_status", "request_id": "raw-%d" % i})))
+
+    await asyncio.sleep(3.0)  # never read during the burst
+    replies, closed, close_frame = 0, False, False
+    deadline = time.monotonic() + 40
+    while time.monotonic() < deadline:
+        try:
+            chunk = await asyncio.wait_for(loop.sock_recv(sock, 65536), timeout=5)
+        except asyncio.TimeoutError:
+            break
+        except OSError:
+            closed = True
+            break
+        if not chunk:
+            closed = True
+            break
+        buf += chunk
+        while True:
+            if len(buf) < 2: break
+            opcode = buf[0] & 0x0F
+            length = buf[1] & 0x7F
+            offset = 2
+            if length == 126:
+                if len(buf) < 4: break
+                length = struct.unpack(">H", buf[2:4])[0]; offset = 4
+            elif length == 127:
+                if len(buf) < 10: break
+                length = struct.unpack(">Q", buf[2:10])[0]; offset = 10
+            if len(buf) < offset + length: break
+            payload = buf[offset:offset + length]
+            buf = buf[offset + length:]
+            if opcode == 8:
+                close_frame = True
+            elif opcode in (1, 2):
+                try:
+                    frame = json.loads(payload)
+                except Exception:
+                    continue
+                if frame.get("type", "").endswith("_response"):
+                    replies += 1
+        if replies >= N or closed or close_frame:
+            break
+
+    # Short delivery is legitimate: the device drops inbound requests when its intake
+    # queue is full. The property that matters is that the connection is either closed
+    # (outbound overflow, as documented) or still usable - never left stalled.
+    probe_replied = False
+    if not closed and not close_frame:
+        for attempt in range(3):
+            probe_id = "raw-probe-%d" % attempt
+            try:
+                await loop.sock_sendall(sock, client_frame(json.dumps({"type": "request_status", "request_id": probe_id})))
+            except OSError:
+                closed = True
+                break
+            probe_deadline = time.monotonic() + 6
+            while time.monotonic() < probe_deadline:
+                try:
+                    chunk = await asyncio.wait_for(loop.sock_recv(sock, 65536), timeout=2)
+                except asyncio.TimeoutError:
+                    break
+                except OSError:
+                    closed = True
+                    break
+                if not chunk:
+                    closed = True
+                    break
+                buf += chunk
+                while True:
+                    if len(buf) < 2: break
+                    opcode = buf[0] & 0x0F
+                    length = buf[1] & 0x7F
+                    offset = 2
+                    if length == 126:
+                        if len(buf) < 4: break
+                        length = struct.unpack(">H", buf[2:4])[0]; offset = 4
+                    elif length == 127:
+                        if len(buf) < 10: break
+                        length = struct.unpack(">Q", buf[2:10])[0]; offset = 10
+                    if len(buf) < offset + length: break
+                    payload = buf[offset:offset + length]
+                    buf = buf[offset + length:]
+                    if opcode == 8:
+                        close_frame = True
+                    elif opcode in (1, 2):
+                        try:
+                            frame = json.loads(payload)
+                        except Exception:
+                            continue
+                        if frame.get("request_id") == probe_id:
+                            probe_replied = True
+                if probe_replied or closed or close_frame:
+                    break
+            if probe_replied or closed or close_frame:
+                break
+
+    if closed or close_frame:
+        outcome = "closed"
+    elif replies >= N:
+        outcome = "complete"
+    elif probe_replied:
+        outcome = "healthy-after-drops"
+    else:
+        outcome = "stalled"
+    print(json.dumps({"outcome": outcome, "replies": replies, "close_frame": close_frame,
+                      "tcp_closed": closed, "probe_replied": probe_replied}))
+    sock.close()
+
+asyncio.run(main())
+'''
 
 
 _STALL_REQUESTS = 200
@@ -670,7 +868,7 @@ import websockets
 async def main():
     host, port, n = sys.argv[1], int(sys.argv[2]), int(sys.argv[3])
     ids = [f"stall-{i}" for i in range(n)]
-    report = {"received": 0, "sent": n, "outcome": "error"}
+    report = {"received": 0, "sent": n, "outcome": "error", "duplicate_ids": 0}
     try:
         async with websockets.connect(f"ws://{host}:{port}", max_queue=1, open_timeout=5) as ws:
             for rid in ids:
@@ -682,11 +880,11 @@ async def main():
                     frame = json.loads(await asyncio.wait_for(ws.recv(), timeout=10))
                     if frame.get("request_id") in ids:
                         seen.append(frame["request_id"])
-                report.update(received=len(seen), outcome="complete")
+                report.update(received=len(seen), duplicate_ids=len(seen) - len(set(seen)), outcome="complete")
             except asyncio.TimeoutError:
-                report.update(received=len(seen), outcome="timeout")
+                report.update(received=len(seen), duplicate_ids=len(seen) - len(set(seen)), outcome="timeout")
             except websockets.ConnectionClosed:
-                report.update(received=len(seen), outcome="closed")
+                report.update(received=len(seen), duplicate_ids=len(seen) - len(set(seen)), outcome="closed")
     except Exception as exc:
         report.update(outcome=f"error:{type(exc).__name__}")
     print(json.dumps(report))

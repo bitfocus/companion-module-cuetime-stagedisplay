@@ -99,6 +99,43 @@ export function buildBrightness(value: unknown): Built<CommandPayloads['set_brig
 	return { ok: true, payload: { brightness } }
 }
 
+/**
+ * The flash-window rules a countdown session must satisfy.
+ *
+ * A countdown's cue runs from `flash_start_time_seconds` back to
+ * (`flash_start_time_seconds` − `flash_length_seconds`), so the device refuses a
+ * window that starts before the session does or extends past the point the
+ * flashing begins:
+ *
+ * - `flash_length_seconds <= flash_start_time_seconds`
+ * - `flash_start_time_seconds <= duration`
+ *
+ * Both are enforced by the device for **countdown sessions only** — a count-up has
+ * no duration bounding its window, and a time-of-day session never flashes — and
+ * the two rejections carry "Flash length must be ≤ flash start time" and "Flash
+ * start time must be ≤ session duration". Checking here turns a device rejection
+ * (which the module can only log as a warning) into an explanation at the control
+ * that produced it.
+ *
+ * The length is deliberately *not* compared with the duration: a 60 s countdown
+ * with start 55 / length 30 is valid, and it fires entirely on screen.
+ */
+function flashWindowProblem(
+	mode: SessionMode | null,
+	durationSeconds: number,
+	flashStartSeconds: number,
+	flashLengthSeconds: number,
+): string | null {
+	if (mode !== 'countdown') return null
+	if (flashLengthSeconds > flashStartSeconds) {
+		return `the flash length (${flashLengthSeconds}s) cannot exceed the flash start time (${flashStartSeconds}s)`
+	}
+	if (flashStartSeconds > durationSeconds) {
+		return `the flash start time (${flashStartSeconds}s) cannot exceed the session duration (${durationSeconds}s)`
+	}
+	return null
+}
+
 export interface AddSessionOptions {
 	name?: unknown
 	mode?: unknown
@@ -170,6 +207,14 @@ export function buildAddSession(options: AddSessionOptions): Built<CommandPayloa
 
 	const flashLength = Number(options.flashLengthSeconds ?? 0)
 	if (Number.isFinite(flashLength) && flashLength > 0) payload.flash_length_seconds = flashLength
+
+	const problem = flashWindowProblem(
+		mode,
+		Number(payload.seconds ?? 0),
+		Number(payload.flash_start_time_seconds ?? 0),
+		Number(payload.flash_length_seconds ?? 0),
+	)
+	if (problem) return { ok: false, kind: 'invalid', reason: problem }
 
 	return { ok: true, payload }
 }
@@ -534,6 +579,16 @@ export function buildUpdateSession(
 
 	const flashLength = Number(options.flashLengthSeconds ?? 0)
 	if (Number.isFinite(flashLength) && flashLength > 0) payload.flash_length_seconds = flashLength
+
+	// The device checks the session as it will be stored, not just the fields in the
+	// frame, so a partial edit that leaves the window invalid is refused too.
+	const problem = flashWindowProblem(
+		effectiveMode as SessionMode | null,
+		Number(payload.seconds ?? existing?.duration ?? 0),
+		Number(payload.flash_start_time_seconds ?? existing?.flash_start_time_seconds ?? 0),
+		Number(payload.flash_length_seconds ?? existing?.flash_length_seconds ?? 0),
+	)
+	if (problem) return { ok: false, kind: 'invalid', reason: problem }
 
 	return { ok: true, payload }
 }
