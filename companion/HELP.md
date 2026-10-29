@@ -71,7 +71,7 @@ says why instead of a button appearing to be broken.
 
 ### Time adjustment
 
-- **Add Time** — Add seconds to the current timer. Fractional seconds are accepted; they are converted to whole milliseconds, which is the field vc146 wants.
+- **Add Time** — Add seconds to the current timer. Fractional seconds are accepted; they are converted to whole milliseconds, which is the field the device expects.
 - **Subtract Time** — Subtract seconds from the current timer.
 
 Both do nothing on a Time of Day session, for the same reason as Pause Session above.

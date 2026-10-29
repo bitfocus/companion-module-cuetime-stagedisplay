@@ -55,7 +55,8 @@ if str(HERE) not in sys.path:
 from companion import CompanionClient  # noqa: E402
 from config import Config, Layout  # noqa: E402
 from device import DeviceClient  # noqa: E402
-from matrix import SCENARIOS, Ctx, Scenario, SkipScenario  # noqa: E402
+from matrix import SCENARIOS, Ctx, Scenario, SkipScenario, _wait_ws  # noqa: E402
+from program import restore_program  # noqa: E402
 from timeline import ScenarioResult, Timeline, write_junit, write_notes, write_run_json  # noqa: E402
 
 
@@ -68,6 +69,94 @@ def select_scenarios(scenarios: list[Scenario], groups: list[str], only: list[st
 		wanted_ids = {o.strip().upper() for item in only for o in item.split(',') if o.strip()}
 		chosen = [s for s in chosen if s.id.upper() in wanted_ids]
 	return chosen
+
+
+async def _port_open(host: str, port: int, timeout: float = 2.0) -> bool:
+	try:
+		reader, writer = await asyncio.wait_for(asyncio.open_connection(host, port), timeout)
+	except (OSError, asyncio.TimeoutError):
+		return False
+	writer.close()
+	try:
+		await writer.wait_closed()
+	except Exception:
+		pass
+	return True
+
+
+def _newest_program_backup() -> Path | None:
+	"""The newest backup that actually holds a program.
+
+	Scenarios back the program up when they start, so a run made while the display
+	was empty leaves empty backups behind (a fresh id, no sessions). Seeding from one
+	of those seeds nothing, so require content.
+	"""
+	backups = sorted(
+		Path(HERE).glob('results/*/program-backup-*.json'),
+		key=lambda path: path.stat().st_mtime,
+		reverse=True,
+	)
+	for path in backups:
+		try:
+			program = json.loads(path.read_text(encoding='utf-8'))
+		except Exception:  # noqa: BLE001
+			continue
+		if program.get('sessions'):
+			return path
+	return None
+
+
+async def _ensure_fixture_program(cfg: Config) -> str | None:
+	"""Put the fixture program back when the display has none.
+
+	The display does not persist its program across an app restart (by design), so a
+	run that follows a restart - or a device power cycle - starts empty and most
+	scenarios would skip or fail for want of the fixture. Re-seed it from the newest
+	backup the harness wrote.
+	"""
+	backup = _newest_program_backup()
+	if backup is None:
+		return None
+	device = DeviceClient(cfg.device_host, cfg.device_port, cfg.timeout)
+	try:
+		await device.connect()
+		state = await device.command('get_program')
+		current = state.get('program') or {}
+		# A restarted app comes back with a *fresh empty* program (has_program true, no
+		# sessions), so presence alone is not enough - check that it has content.
+		if current.get('program_id') and (current.get('sessions') or []):
+			return None
+		program = json.loads(backup.read_text(encoding='utf-8'))
+		ok, detail = await restore_program(device, program)
+		return f'display had no program; seeded {backup.name}: {detail}' if ok else f'could not seed the fixture program: {detail}'
+	except Exception as exc:  # noqa: BLE001
+		return f'fixture program check failed: {exc}'
+	finally:
+		await device.close()
+
+
+async def _ensure_device_up(cfg: Config) -> str | None:
+	"""Make sure the display is serving before a scenario runs.
+
+	Restarting the app (A2/A3) can leave it alive with every listener stopped a few
+	seconds later - the log shows "JSON WebSocket server started" followed by
+	"... server stopped" in the same process, after which every scenario fails for a
+	reason that has nothing to do with the module. Recover here instead, and report
+	that it happened.
+	"""
+	if await _port_open(cfg.device_host, cfg.device_port):
+		return None
+	handle, reason = adb.connect(cfg.device_host)
+	if handle is None:
+		return f'device was not serving and adb cannot recover it: {reason}'
+	try:
+		handle.start()
+	except Exception as exc:  # noqa: BLE001
+		return f'device was not serving; restart failed: {exc}'
+	hello = await _wait_ws(cfg.device_host, cfg.device_port, timeout=60)
+	if hello is None:
+		return 'device was not serving; still down after a restart'
+	return 'device was not serving; restarted it before this scenario'
 
 
 async def run_one(
@@ -84,6 +173,8 @@ async def run_one(
 		result.duration = time.monotonic() - started
 		return result
 
+	recovery = await _ensure_device_up(cfg)
+	seeded = await _ensure_fixture_program(cfg)
 	timeline = Timeline(Path(cfg.output_dir))
 	device = DeviceClient(cfg.device_host, cfg.device_port, cfg.timeout)
 	ctx = Ctx(
@@ -105,6 +196,10 @@ async def run_one(
 		if cfg_verbose:
 			traceback.print_exc()
 	finally:
+		if recovery:
+			ctx.warn('device was reachable for this scenario', True, recovery)
+		if seeded:
+			ctx.warn('fixture program present for this scenario', True, seeded)
 		start_index = 0
 		try:
 			for ts, frame in device.frames[start_index:]:

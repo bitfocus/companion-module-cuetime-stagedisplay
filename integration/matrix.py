@@ -638,10 +638,19 @@ async def g3_back_pressure(ctx: Ctx) -> None:
 		started = time.monotonic()
 		status = await ctx.device.snapshot()
 		latency = time.monotonic() - started
+		# Since vc150 every queued request is *processed* rather than dropped, so a
+		# healthy request can wait behind the burst in the executor queue. That is
+		# backlog, not a per-client block: assert it is served within a few seconds and
+		# record the figure.
 		ctx.check(
-			'healthy client is not delayed by the stalled one',
-			isinstance(status.get('control_center'), dict) and latency < 1.0,
+			'healthy client is still served while the stalled one is stuck',
+			isinstance(status.get('control_center'), dict) and latency < 5.0,
 			f'snapshot in {latency * 1000:.0f} ms',
+		)
+		ctx.warn(
+			'healthy snapshot answered promptly (<1 s)',
+			latency < 1.0,
+			f'{latency * 1000:.0f} ms behind a {_STALL_REQUESTS}-request burst',
 		)
 		raw = await asyncio.wait_for(stalled.stdout.readline(), timeout=60)
 	finally:
@@ -1615,6 +1624,9 @@ def _close_device_menu(handle: 'Adb', nodes: list['adb.UiNode']) -> bool:
 			if candidate.clickable and candidate.enabled and x1 <= cx <= x2 and y1 <= cy <= y2:
 				handle.tap(*candidate.centre)
 				return True
+	# BACK is only ever a *menu* dismissal. On the idle screen it sends MainActivity to
+	# the background, and this device freezes backgrounded apps: the servers stop a few
+	# seconds later and every subsequent scenario fails for an unrelated reason.
 	handle.key('KEYCODE_BACK')
 	return False
 
@@ -1634,6 +1646,10 @@ async def f4_local_ui(ctx: Ctx) -> None:
 	handle = _adb_for(ctx)
 	await ctx.restore()
 	before = await ctx.snapshot()
+	# A2/A3 restart the app and then send_program/show_session; those broadcasts can
+	# land a moment after this scenario's client connects, so settle before marking or
+	# the window below catches another scenario's program change as if a touch did it.
+	await asyncio.sleep(2.0)
 	mark = ctx.device.mark
 
 	size = handle.run('shell', 'wm', 'size')
@@ -1656,8 +1672,9 @@ async def f4_local_ui(ctx: Ctx) -> None:
 		await asyncio.sleep(1.5)
 		closed = 'Device Information' not in handle.ui_xml()
 		ctx.check('the device menu was closed again', closed, 'still open')
-	handle.key('KEYCODE_BACK')
 
+	# No BACK here on purpose: see _close_device_menu. Pressing it with no menu open
+	# backgrounds the app, the device freezes it, and its listeners go away.
 	after = await ctx.snapshot()
 	ctx.equal('run state unchanged by local touch', DeviceClient.cc(after).get('timer_run_state'), DeviceClient.cc(before).get('timer_run_state'))
 	ctx.equal('current session unchanged by local touch', DeviceClient.cc(after).get('current_session_id'), DeviceClient.cc(before).get('current_session_id'))
