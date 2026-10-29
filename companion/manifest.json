@@ -30,5 +30,11 @@
 			"protocol": "tcp"
 		}
 	},
-	"keywords": []
+	"keywords": [
+		"cuetime",
+		"stage display",
+		"timer",
+		"countdown",
+		"presenter"
+	]
 }

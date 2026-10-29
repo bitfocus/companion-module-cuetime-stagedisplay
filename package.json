@@ -15,6 +15,7 @@
 		"test": "vitest run"
 	},
 	"license": "MIT",
+	"author": "Joshua D. Boyd for CueTime.io <jdboyd@boydtechnicalsolutions.com>",
 	"repository": {
 		"type": "git",
 		"url": "git+https://github.com/bitfocus/companion-module-cuetime-stagedisplay.git"
