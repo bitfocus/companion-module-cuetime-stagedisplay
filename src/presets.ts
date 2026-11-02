@@ -229,10 +229,11 @@ export function UpdatePresets(self: ModuleInstance): void {
 				},
 			],
 			feedbacks: [
+				// No style override: the feedback's own defaultStyle supplies the red "active"
+				// look, and the preset's base style above is the blackout-off look.
 				{
 					feedbackId: 'is_blackout',
 					options: {},
-					style: { bgcolor: 0x000000, color: 0xffffff },
 				},
 			],
 		},

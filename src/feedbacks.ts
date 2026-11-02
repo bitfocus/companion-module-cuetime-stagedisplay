@@ -1,7 +1,7 @@
 import { combineRgb } from '@companion-module/base'
 import type { CompanionAdvancedFeedbackResult } from '@companion-module/base'
 import type { ModuleInstance } from './main.ts'
-import { icon_eye, icon_bar_eye } from './generated-icons.ts'
+import { icon_eye } from './generated-icons.ts'
 import {
 	checkIsPlaying,
 	checkIsPaused,
@@ -76,24 +76,19 @@ export function UpdateFeedbacks(self: ModuleInstance): void {
 		},
 		is_blackout: {
 			name: 'Blackout Mode Active',
-			type: 'advanced',
-			// API 2.1 requires advanced feedbacks to declare the style properties they touch.
-			affectedProperties: ['bgcolor', 'color', 'png64'],
-			options: [],
-			callback: (): CompanionAdvancedFeedbackResult => {
-				if (checkIsBlackout(self.state)) {
-					return {
-						bgcolor: combineRgb(255, 0, 0),
-						color: combineRgb(255, 255, 255),
-						png64: icon_eye,
-					}
-				}
-				return {
-					bgcolor: combineRgb(0, 0, 0),
-					color: combineRgb(255, 255, 255),
-					png64: icon_bar_eye,
-				}
+			// Boolean, not advanced: an advanced feedback owns the whole style, so it
+			// repainted a button the operator had styled themselves even when blackout was
+			// off. As a boolean it contributes only the "active" look; the off look belongs
+			// to the button or preset style (the Blackout preset already uses the bar-eye
+			// icon on black).
+			type: 'boolean',
+			defaultStyle: {
+				bgcolor: combineRgb(255, 0, 0),
+				color: combineRgb(255, 255, 255),
+				png64: icon_eye,
 			},
+			options: [],
+			callback: () => checkIsBlackout(self.state),
 		},
 		is_flashing: {
 			name: 'Flash Effect Active',

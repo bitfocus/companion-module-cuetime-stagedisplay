@@ -52,7 +52,13 @@ type PresetLike = {
 }
 
 type ActionDef = { name: string; options: OptionDef[]; callback: (event: unknown) => unknown }
-type FeedbackDef = { name: string; options: OptionDef[]; callback: (event: unknown) => unknown }
+type FeedbackDef = {
+	name: string
+	type?: string
+	defaultStyle?: Record<string, unknown>
+	options: OptionDef[]
+	callback: (event: unknown) => unknown
+}
 
 const schema = JSON.parse(
 	readFileSync(fileURLToPath(new URL('../schemas/protocol-schema.json', import.meta.url)), 'utf8'),
@@ -291,6 +297,22 @@ describe('shipped presets', () => {
 			}
 		}
 		expect(problems).toEqual([])
+	})
+
+	it('uses a boolean feedback for blackout, so a custom button style survives when it is off', () => {
+		// As an advanced feedback this owned the whole style and repainted a button the
+		// operator had styled themselves with black/white/bar-eye even while blackout was
+		// off. Boolean feedbacks contribute only their "active" look.
+		const feedback = harness.feedbacks['is_blackout']
+		expect(feedback.type).toBe('boolean')
+		expect(feedback.defaultStyle?.png64).toEqual(expect.any(String))
+
+		// The off look belongs to the preset, which must not override the active style.
+		const preset = harness.presets['blackout']
+		expect(preset.style?.png64).toEqual(expect.any(String))
+		const entry = (preset.feedbacks ?? []).find((item) => item.feedbackId === 'is_blackout')
+		expect(entry).toBeDefined()
+		expect(entry?.style).toBeUndefined()
 	})
 
 	it('turns every preset press into a valid protocol command', async () => {
