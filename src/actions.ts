@@ -20,13 +20,6 @@ import {
 import { isCurrentSessionTimeOfDay } from './logic.ts'
 
 /**
- * Companion hands action callbacks a loosely-typed options bag. Typing the
- * parameter this way keeps the reads below honest without threading the
- * per-action option generics through every definition.
- */
-type ActionEvent = { options: Record<string, any> }
-
-/**
  * Logs and reports whether a command should be skipped because the current session is
  * a Time of Day wall clock.
  *
@@ -150,7 +143,7 @@ export function UpdateActions(self: ModuleInstance): void {
 					max: 86400,
 				},
 			],
-			callback: async (event: ActionEvent) => {
+			callback: async (event) => {
 				if (skipForTimeOfDay(self, 'Add time')) return
 				const built = buildTimeDelta(event.options.seconds)
 				if (!built.ok) {
@@ -172,7 +165,7 @@ export function UpdateActions(self: ModuleInstance): void {
 					max: 86400,
 				},
 			],
-			callback: async (event: ActionEvent) => {
+			callback: async (event) => {
 				if (skipForTimeOfDay(self, 'Subtract time')) return
 				const built = buildTimeDelta(event.options.seconds)
 				if (!built.ok) {
@@ -255,7 +248,7 @@ export function UpdateActions(self: ModuleInstance): void {
 					default: false,
 				},
 			],
-			callback: async (event: ActionEvent) => {
+			callback: async (event) => {
 				const built = buildAddSession({
 					name: event.options.name,
 					mode: event.options.mode,
@@ -299,7 +292,7 @@ export function UpdateActions(self: ModuleInstance): void {
 						'Selects a session by its position in the program. This is the only way in: start and navigate need a current session, and the device has no fallback to the first.',
 				},
 			],
-			callback: async (event: ActionEvent) => {
+			callback: async (event) => {
 				const built = buildShowSession(self.state, event.options.session_number)
 				if (!built.ok) {
 					self.log('warn', `Show session: ${built.reason}; nothing sent`)
@@ -318,7 +311,7 @@ export function UpdateActions(self: ModuleInstance): void {
 					default: '',
 				},
 			],
-			callback: async (event: ActionEvent) => {
+			callback: async (event) => {
 				const built = buildSessionMove(self.state, event.options.session_id, 'up')
 				if (!built.ok) {
 					self.log(built.kind === 'noop' ? 'debug' : 'warn', `Move session up: ${built.reason}; nothing sent`)
@@ -337,7 +330,7 @@ export function UpdateActions(self: ModuleInstance): void {
 					default: '',
 				},
 			],
-			callback: async (event: ActionEvent) => {
+			callback: async (event) => {
 				const built = buildSessionMove(self.state, event.options.session_id, 'down')
 				if (!built.ok) {
 					self.log(built.kind === 'noop' ? 'debug' : 'warn', `Move session down: ${built.reason}; nothing sent`)
@@ -356,7 +349,7 @@ export function UpdateActions(self: ModuleInstance): void {
 					default: '',
 				},
 			],
-			callback: async (event: ActionEvent) => {
+			callback: async (event) => {
 				const built = buildDeleteSession(self.state, event.options.session_id)
 				if (!built.ok) {
 					self.log(built.kind === 'noop' ? 'debug' : 'warn', `Delete session: ${built.reason}; nothing sent`)
@@ -438,7 +431,7 @@ export function UpdateActions(self: ModuleInstance): void {
 					max: 86400,
 				},
 			],
-			callback: async (event: ActionEvent) => {
+			callback: async (event) => {
 				const built = buildUpdateSession(self.state, {
 					sessionId: event.options.session_id,
 					mode: event.options.mode,
@@ -480,7 +473,7 @@ export function UpdateActions(self: ModuleInstance): void {
 					useVariables: true,
 				},
 			],
-			callback: async (event: ActionEvent) => {
+			callback: async (event) => {
 				const built = buildAddMessage(event.options.content)
 				if (!built.ok) {
 					self.log('warn', `Add message: ${built.reason}; nothing sent`)
@@ -512,7 +505,7 @@ export function UpdateActions(self: ModuleInstance): void {
 					max: 999,
 				},
 			],
-			callback: async (event: ActionEvent) => {
+			callback: async (event) => {
 				const built = buildDeleteMessage(self.state, event.options.message_number)
 				if (!built.ok) {
 					self.log('warn', `Delete message: ${built.reason}; nothing sent`)
@@ -534,7 +527,7 @@ export function UpdateActions(self: ModuleInstance): void {
 					max: 999,
 				},
 			],
-			callback: async (event: ActionEvent) => {
+			callback: async (event) => {
 				const built = buildMessageMove(self.state, event.options.message_number, 'up')
 				if (!built.ok) {
 					self.log(built.kind === 'noop' ? 'debug' : 'warn', `Move message up: ${built.reason}; nothing sent`)
@@ -555,7 +548,7 @@ export function UpdateActions(self: ModuleInstance): void {
 					max: 999,
 				},
 			],
-			callback: async (event: ActionEvent) => {
+			callback: async (event) => {
 				const built = buildMessageMove(self.state, event.options.message_number, 'down')
 				if (!built.ok) {
 					self.log(built.kind === 'noop' ? 'debug' : 'warn', `Move message down: ${built.reason}; nothing sent`)
@@ -583,7 +576,7 @@ export function UpdateActions(self: ModuleInstance): void {
 					useVariables: true,
 				},
 			],
-			callback: async (event: ActionEvent) => {
+			callback: async (event) => {
 				const built = buildUpdateMessage(self.state, event.options.message_number, event.options.content)
 				if (!built.ok) {
 					self.log('warn', `Update message: ${built.reason}; nothing sent`)
@@ -608,8 +601,8 @@ export function UpdateActions(self: ModuleInstance): void {
 					],
 				},
 			],
-			callback: async (event: ActionEvent) => {
-				const action = String(event.options.action ?? 'toggle')
+			callback: async (event) => {
+				const action = event.options.action ?? 'toggle'
 				// `set_blackout` has no toggle form, so resolve one from reported state.
 				const enabled =
 					action === 'enable' ? true : action === 'disable' ? false : !(self.state.controlCenter?.is_blackout ?? false)
@@ -632,7 +625,7 @@ export function UpdateActions(self: ModuleInstance): void {
 					],
 				},
 			],
-			callback: async (event: ActionEvent) => {
+			callback: async (event) => {
 				self.sendCommand('set_glow', { enabled: event.options.enabled === 'true' })
 			},
 		},
@@ -659,8 +652,8 @@ export function UpdateActions(self: ModuleInstance): void {
 					],
 				},
 			],
-			callback: async (event: ActionEvent) => {
-				self.sendCommand('set_flash', { action: String(event.options.action ?? 'enable') })
+			callback: async (event) => {
+				self.sendCommand('set_flash', { action: event.options.action ?? 'enable' })
 			},
 		},
 		toggle_flash: {
@@ -705,7 +698,7 @@ export function UpdateActions(self: ModuleInstance): void {
 						'The flash flag is shared with Set/Toggle Flash. "Leave unchanged" omits the field, the only form whose meaning does not depend on firmware version.',
 				},
 			],
-			callback: async (event: ActionEvent) => {
+			callback: async (event) => {
 				const built = buildShowMessage(self.state, {
 					messageNumber: event.options.message_number,
 					text: event.options.text,
@@ -753,7 +746,7 @@ export function UpdateActions(self: ModuleInstance): void {
 					max: 100,
 				},
 			],
-			callback: async (event: ActionEvent) => {
+			callback: async (event) => {
 				const built = buildBrightness(event.options.brightness)
 				if (!built.ok) {
 					self.log('warn', `Set brightness: ${built.reason}; nothing sent`)
@@ -777,7 +770,7 @@ export function UpdateActions(self: ModuleInstance): void {
 					],
 				},
 			],
-			callback: async (event: ActionEvent) => {
+			callback: async (event) => {
 				self.sendCommand('set_is_time_up_display', { enabled: event.options.enabled === 'true' })
 			},
 		},
@@ -798,7 +791,7 @@ export function UpdateActions(self: ModuleInstance): void {
 					default: false,
 				},
 			],
-			callback: async (event: ActionEvent) => {
+			callback: async (event) => {
 				if (event.options.confirm !== true) {
 					self.log('warn', 'Delete all messages: not confirmed; nothing sent')
 					return
@@ -816,7 +809,7 @@ export function UpdateActions(self: ModuleInstance): void {
 					default: false,
 				},
 			],
-			callback: async (event: ActionEvent) => {
+			callback: async (event) => {
 				if (event.options.confirm !== true) {
 					self.log('warn', 'Delete all sessions: not confirmed; nothing sent')
 					return

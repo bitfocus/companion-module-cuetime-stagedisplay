@@ -1,5 +1,4 @@
 import { combineRgb } from '@companion-module/base'
-import type { CompanionAdvancedFeedbackResult } from '@companion-module/base'
 import type { ModuleInstance } from './main.ts'
 import { icon_eye } from './generated-icons.ts'
 import {
@@ -241,11 +240,11 @@ export function UpdateFeedbacks(self: ModuleInstance): void {
 					default: false,
 				},
 			],
-			callback: (feedback): CompanionAdvancedFeedbackResult => {
+			callback: (feedback) => {
 				const percent = progressPercent(self.state)
 				const showPercent = feedback.options.show_percentage === true
-				const barColor = Number(feedback.options.bar_color ?? 0)
-				const trackColor = Number(feedback.options.track_color ?? 0)
+				const barColor = feedback.options.bar_color ?? 0
+				const trackColor = feedback.options.track_color ?? 0
 
 				const image = feedback.image
 				if (image && image.width > 0 && image.height > 0) {
@@ -253,7 +252,7 @@ export function UpdateFeedbacks(self: ModuleInstance): void {
 					// ~4 bytes per pixel before base64, and this is refreshed on every event.
 					const thickness = Math.min(
 						THICKNESS_MAX_PERCENT,
-						Math.max(THICKNESS_MIN_PERCENT, Number(feedback.options.thickness ?? 12)),
+						Math.max(THICKNESS_MIN_PERCENT, feedback.options.thickness ?? 12),
 					)
 					const barHeight = Math.max(1, Math.round((image.height * thickness) / 100))
 					const atTop = feedback.options.edge === 'top'

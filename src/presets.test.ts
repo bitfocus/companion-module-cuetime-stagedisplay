@@ -333,7 +333,9 @@ describe('shipped presets', () => {
 		expect(preset.style?.png64).toEqual(expect.any(String))
 		const entry = (preset.feedbacks ?? []).find((item) => item.feedbackId === 'is_blackout')
 		expect(entry).toBeDefined()
-		expect(entry?.style).toBeUndefined()
+		// Empty, not absent: a boolean entry carries a style, and empty means "keep the
+		// feedback's own defaultStyle" rather than overriding the active look.
+		expect(entry?.style).toEqual({})
 	})
 
 	it('turns every preset press into a valid protocol command', async () => {

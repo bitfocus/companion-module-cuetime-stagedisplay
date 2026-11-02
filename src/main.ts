@@ -23,9 +23,103 @@ export interface Config extends JsonObject {
 	'cuetime-display': string | null
 }
 
+/**
+ * The connection's shapes, including every action and feedback option.
+ *
+ * Declaring the option schemas here is what makes the callbacks typed: without them
+ * `event.options` degrades to "any key, any value", so a misspelt option id compiles
+ * and the action silently sends nothing. Fields are optional because an option without
+ * a `default` can be absent, and because actions must keep working against state the
+ * display has not reported yet.
+ */
 export interface ModuleInstanceTypes extends InstanceTypes {
 	config: Config
 	secrets: undefined
+	actions: {
+		navigate_next_session: { options: Record<string, never> }
+		navigate_previous_session: { options: Record<string, never> }
+		toggle_playback: { options: Record<string, never> }
+		start_session: { options: Record<string, never> }
+		pause_session: { options: Record<string, never> }
+		reset_current_session: { options: Record<string, never> }
+		reset_program_elapsed_timer: { options: Record<string, never> }
+		add_time: { options: { seconds?: number } }
+		subtract_time: { options: { seconds?: number } }
+		add_session: {
+			options: {
+				name?: string
+				mode?: string
+				seconds?: number
+				offset?: string
+				presenter_name?: string
+				notes?: string
+				flash_start_time_seconds?: number
+				flash_length_seconds?: number
+				start?: boolean
+			}
+		}
+		show_session: { options: { session_number?: number } }
+		move_session_up: { options: { session_id?: string } }
+		move_session_down: { options: { session_id?: string } }
+		delete_session: { options: { session_id?: string } }
+		update_session: {
+			options: {
+				session_id?: string
+				mode?: string
+				seconds?: string
+				offset?: string
+				name?: string
+				presenter_name?: string
+				notes?: string
+				flash_start_time_seconds?: number
+				flash_length_seconds?: number
+			}
+		}
+		add_message: { options: { content?: string } }
+		delete_message: { options: { message_number?: number } }
+		move_message_up: { options: { message_number?: number } }
+		move_message_down: { options: { message_number?: number } }
+		update_message: { options: { message_number?: number; content?: string } }
+		blackout: { options: { action?: string } }
+		set_glow: { options: { enabled?: string } }
+		toggle_glow: { options: Record<string, never> }
+		set_flash: { options: { action?: string } }
+		toggle_flash: { options: Record<string, never> }
+		show_message: { options: { message_number?: number; text?: string; flash?: string } }
+		hide_message: { options: Record<string, never> }
+		show_idle: { options: Record<string, never> }
+		set_brightness: { options: { brightness?: number } }
+		set_is_time_up_display: { options: { enabled?: string } }
+		toggle_is_time_up_display: { options: Record<string, never> }
+		delete_all_messages: { options: { confirm?: boolean } }
+		delete_all_sessions: { options: { confirm?: boolean } }
+	}
+	feedbacks: {
+		is_connected: { type: 'boolean'; options: Record<string, never> }
+		is_playing: { type: 'boolean'; options: Record<string, never> }
+		is_paused: { type: 'boolean'; options: Record<string, never> }
+		is_idle: { type: 'boolean'; options: Record<string, never> }
+		is_glowing: { type: 'boolean'; options: Record<string, never> }
+		is_blackout: { type: 'boolean'; options: Record<string, never> }
+		is_flashing: { type: 'boolean'; options: Record<string, never> }
+		has_previous_session: { type: 'boolean'; options: Record<string, never> }
+		no_previous_session: { type: 'boolean'; options: Record<string, never> }
+		has_next_session: { type: 'boolean'; options: Record<string, never> }
+		no_next_session: { type: 'boolean'; options: Record<string, never> }
+		message_showing: { type: 'boolean'; options: Record<string, never> }
+		is_time_up_display: { type: 'boolean'; options: Record<string, never> }
+		is_time_up_flashing: { type: 'boolean'; options: Record<string, never> }
+		progress_bar: {
+			type: 'advanced'
+			options: {
+				bar_color?: number
+				track_color?: number
+				thickness?: number
+				edge?: string
+				show_percentage?: boolean
+			}
+		}
+	}
 }
 
 export interface ModuleInstance extends InstanceBase<ModuleInstanceTypes> {
