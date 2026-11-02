@@ -75,6 +75,15 @@ jobs:
           yarn install
         env:
           CI: true
+      - name: Generate assets
+        # `src/generated-icons.ts` is generated and gitignored, so a fresh checkout has
+        # none until it is produced — and the feedback and preset definitions import it.
+        # The lint job runs `yarn build`, which generates it as a side effect; this job
+        # only needs the assets.
+        run: |
+          yarn generate-icons
+        env:
+          CI: true
       - name: Run tests
         run: |
           yarn test
