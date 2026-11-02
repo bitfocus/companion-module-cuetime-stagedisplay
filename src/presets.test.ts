@@ -220,20 +220,41 @@ describe('shipped presets', () => {
 	const presetIds = Object.keys(harness.presets)
 
 	it('publishes every preset to Companion', () => {
-		expect(presetIds.length).toBe(20)
-		expect(harness.structure).toHaveLength(20)
+		expect(presetIds).toHaveLength(20)
 	})
 
-	it('lists each preset in the section structure under its own id', () => {
+	it('groups the presets into the six sections HELP.md documents', () => {
+		expect(harness.structure.map((section) => section.name)).toEqual([
+			'Navigation',
+			'Timer Control',
+			'Time Display',
+			'Session Info',
+			'Message',
+			'Effects',
+		])
+	})
+
+	it('places every preset in exactly one section', () => {
+		// A preset left out of every section is invisible in the panel; one listed twice is
+		// shown twice. Both are silent, so they are checked rather than assumed.
 		const problems: string[] = []
+		const seen = new Map<string, string>()
 		for (const section of harness.structure) {
-			if (!harness.presets[section.id]) problems.push(`section "${section.id}" has no preset of that id`)
-			for (const definition of section.definitions ?? []) {
-				for (const id of definition.presets ?? []) {
-					if (!harness.presets[id]) problems.push(`section "${section.id}" references unknown preset "${id}"`)
-				}
-			}
+			const ids = (section.definitions ?? []).flatMap((definition) => definition.presets ?? [])
+			if (ids.length === 0) problems.push(`section "${section.id}" is empty`)
 			if (section.name.trim() === '') problems.push(`section "${section.id}" has an empty name`)
+			for (const id of ids) {
+				if (!harness.presets[id]) {
+					problems.push(`section "${section.id}" references unknown preset "${id}"`)
+					continue
+				}
+				const previous = seen.get(id)
+				if (previous) problems.push(`preset "${id}" appears in both "${previous}" and "${section.id}"`)
+				seen.set(id, section.id)
+			}
+		}
+		for (const id of presetIds) {
+			if (!seen.has(id)) problems.push(`preset "${id}" is in no section, so it would be invisible`)
 		}
 		expect(problems).toEqual([])
 	})

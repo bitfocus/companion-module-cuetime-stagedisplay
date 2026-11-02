@@ -152,12 +152,16 @@ The module includes a set of built-in presets. After applying a preset to a butt
 
 ### Navigation Presets
 
-| Preset                           | Description                                                                                                      |
-| -------------------------------- | ---------------------------------------------------------------------------------------------------------------- |
-| **Navigate to Next Session**     | Arrow icon. No feedback.                                                                                         |
-| **Navigate to Previous Session** | Arrow icon. No feedback.                                                                                         |
-| **Previous Session**             | Shows the previous session name on a frame. Tap to navigate back. Blue highlight when a previous session exists. |
-| **Next Session**                 | Shows the next session name on a frame. Tap to navigate forward. Blue highlight when a next session exists.      |
+| Preset                                | Description                                                                                                                         |
+| ------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------- |
+| **Navigate to Next Session**          | Arrow icon. No feedback.                                                                                                            |
+| **Navigate to Previous Session**      | Arrow icon. No feedback.                                                                                                            |
+| **Previous Session**                  | Shows the previous session name on a frame. Tap to navigate back. Blue highlight when a previous session exists.                    |
+| **Previous Session Presenter**        | Shows the previous session's presenter on a frame. Tap to navigate back. Blue highlight when a previous session exists.             |
+| **Previous Session Name & Presenter** | Two-line readout of the previous session's name and presenter. Tap to navigate back. Blue highlight when a previous session exists. |
+| **Next Session**                      | Shows the next session name on a frame. Tap to navigate forward. Blue highlight when a next session exists.                         |
+| **Next Session Presenter**            | Shows the next session's presenter on a frame. Tap to navigate forward. Blue highlight when a next session exists.                  |
+| **Next Session Name & Presenter**     | Two-line readout of the next session's name and presenter. Tap to navigate forward. Blue highlight when a next session exists.      |
 
 ### Timer Control Presets
 
@@ -192,10 +196,11 @@ The toggle reads the message state the device reports, so it stays correct even 
 
 ### Effect Presets
 
-| Preset           | Description                                                        |
-| ---------------- | ------------------------------------------------------------------ |
-| **Toggle Flash** | Flash icon. Toggles the flash effect. Orange feedback when active. |
-| **Toggle Glow**  | Glow icon. Toggles the glow effect. Yellow feedback when active.   |
+| Preset           | Description                                                                                                     |
+| ---------------- | --------------------------------------------------------------------------------------------------------------- |
+| **Toggle Flash** | Flash icon. Toggles the flash effect. Orange feedback when active.                                              |
+| **Toggle Glow**  | Glow icon. Toggles the glow effect. Yellow feedback when active.                                                |
+| **Blackout**     | Bar-eye icon on black. Toggles the blackout overlay. Turns red with the open-eye icon while blackout is active. |
 
 ### Customizing Presets
 

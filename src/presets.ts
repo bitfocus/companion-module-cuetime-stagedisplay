@@ -15,7 +15,7 @@ import {
 } from './generated-icons.ts'
 
 export function UpdatePresets(self: ModuleInstance): void {
-	const presets: CompanionPresetDefinitions<ModuleInstanceTypes> = {
+	const presets = {
 		navigate_next: {
 			type: 'simple',
 			name: 'Navigate to Next Session',
@@ -517,28 +517,71 @@ export function UpdatePresets(self: ModuleInstance): void {
 				},
 			],
 		},
-	}
+	} satisfies CompanionPresetDefinitions<ModuleInstanceTypes>
 
-	const structure: CompanionPresetSection[] = Object.keys(presets).map((id) => {
-		// Every preset this module defines is a plain 'simple' entry; the union also covers
-		// 'alternatives' groups, which carry no name of their own.
-		const preset = presets[id]
-		const name = preset && preset.type !== 'alternatives' ? preset.name : ''
-
-		return {
-			id,
-			name,
-			definitions: [
-				{
-					id: 'default',
-					name,
-					description: '',
-					type: 'simple',
-					presets: [id],
-				},
+	/**
+	 * The preset panel's sections, in the order a show is driven: get to a session, run
+	 * the timer, read the time, read position, message, overlays.
+	 *
+	 * These are the six groups HELP.md documents, so the panel and the help text agree.
+	 * Listing them by hand (rather than emitting one section per preset) is what stops the
+	 * panel being a twenty-item list; typing the members as preset ids means a renamed
+	 * preset breaks the build instead of quietly vanishing from the panel, and
+	 * `presets.test.ts` checks the ids are covered exactly once.
+	 */
+	const SECTIONS: { id: string; name: string; presets: (keyof typeof presets)[] }[] = [
+		{
+			id: 'navigation',
+			name: 'Navigation',
+			presets: [
+				'navigate_next',
+				'navigate_previous',
+				'previous_session',
+				'previous_session_presenter',
+				'previous_session_name_presenter',
+				'next_session',
+				'next_session_presenter',
+				'next_session_name_presenter',
 			],
-		}
-	})
+		},
+		{
+			id: 'timer_control',
+			name: 'Timer Control',
+			presets: ['toggle_playback', 'pause', 'add_time', 'subtract_time'],
+		},
+		{
+			id: 'time_display',
+			name: 'Time Display',
+			presets: ['elapsed_time', 'remaining_time', 'time_info'],
+		},
+		{
+			id: 'session_info',
+			name: 'Session Info',
+			presets: ['session_counter'],
+		},
+		{
+			id: 'message',
+			name: 'Message',
+			presets: ['show_message'],
+		},
+		{
+			id: 'effects',
+			name: 'Effects',
+			presets: ['toggle_flash', 'toggle_glow', 'blackout'],
+		},
+	]
+
+	const structure: CompanionPresetSection[] = SECTIONS.map((section) => ({
+		id: section.id,
+		name: section.name,
+		definitions: section.presets.map((id) => ({
+			id,
+			name: presets[id].name,
+			description: '',
+			type: 'simple' as const,
+			presets: [id],
+		})),
+	}))
 
 	self.setPresetDefinitions(structure, presets)
 }
