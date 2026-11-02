@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, afterEach } from 'vitest'
+import { describe, it, expect, beforeAll, beforeEach, afterEach } from 'vitest'
 import type { ModuleInstance } from './main.ts'
 import { UpdateActions } from './actions.ts'
 import type { CommandType } from './protocol/generated.ts'
@@ -133,5 +133,63 @@ describe('action callbacks do not block on the device reply', () => {
 		localDefs['navigate_next_session'].callback({ options: {} })
 		localDefs['navigate_previous_session'].callback({ options: {} })
 		expect(localSent).toEqual([])
+	})
+})
+
+/**
+ * Option metadata that only Companion's UI consumes: without `useVariables` a typed
+ * `$(…)` is sent literally, and without `disableAutoExpression` an on/off dropdown can
+ * be switched to an expression whose value is not one of the choice ids (the action is
+ * then silently skipped). Neither is observable from the protocol, so pin them here.
+ */
+describe('action option metadata', () => {
+	type OptionDef = { id: string; useVariables?: boolean; disableAutoExpression?: boolean }
+	let defs: Record<string, { options: OptionDef[] }>
+
+	beforeAll(() => {
+		let captured: Record<string, { options: OptionDef[] }> = {}
+		const self = {
+			state: {},
+			setActionDefinitions: (value: Record<string, { options: OptionDef[] }>) => {
+				captured = value
+			},
+		} as unknown as ModuleInstance
+		UpdateActions(self)
+		defs = captured
+	})
+
+	const field = (action: string, id: string): OptionDef => {
+		const found = defs[action]?.options.find((option) => option.id === id)
+		if (!found) throw new Error(`${action}.${id} is not defined`)
+		return found
+	}
+
+	it('lets operators type variables into the text that goes on the glass', () => {
+		const textFields: [string, string][] = [
+			['show_message', 'text'],
+			['add_message', 'content'],
+			['update_message', 'content'],
+			['add_session', 'name'],
+			['add_session', 'presenter_name'],
+			['add_session', 'notes'],
+			['update_session', 'name'],
+			['update_session', 'presenter_name'],
+			['update_session', 'notes'],
+		]
+		for (const [action, id] of textFields) {
+			expect(field(action, id).useVariables, `${action}.${id} must accept variables`).toBe(true)
+		}
+	})
+
+	it('keeps the on/off dropdowns out of expression mode', () => {
+		const toggles: [string, string][] = [
+			['blackout', 'action'],
+			['set_glow', 'enabled'],
+			['set_flash', 'action'],
+			['set_is_time_up_display', 'enabled'],
+		]
+		for (const [action, id] of toggles) {
+			expect(field(action, id).disableAutoExpression, `${action}.${id} must stay a plain choice`).toBe(true)
+		}
 	})
 })

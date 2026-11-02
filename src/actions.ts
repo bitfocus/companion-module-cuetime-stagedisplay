@@ -180,6 +180,7 @@ export function UpdateActions(self: ModuleInstance): void {
 					id: 'name',
 					label: 'Session name',
 					default: '',
+					useVariables: true,
 				},
 				{
 					type: 'dropdown',
@@ -212,12 +213,14 @@ export function UpdateActions(self: ModuleInstance): void {
 					id: 'presenter_name',
 					label: 'Presenter name (optional)',
 					default: '',
+					useVariables: true,
 				},
 				{
 					type: 'textinput',
 					id: 'notes',
 					label: 'Notes (optional)',
 					default: '',
+					useVariables: true,
 				},
 				{
 					type: 'number',
@@ -392,18 +395,21 @@ export function UpdateActions(self: ModuleInstance): void {
 					id: 'name',
 					label: 'Session name (blank = leave unchanged)',
 					default: '',
+					useVariables: true,
 				},
 				{
 					type: 'textinput',
 					id: 'presenter_name',
 					label: 'Presenter name (blank = leave unchanged)',
 					default: '',
+					useVariables: true,
 				},
 				{
 					type: 'textinput',
 					id: 'notes',
 					label: 'Notes (blank = leave unchanged)',
 					default: '',
+					useVariables: true,
 				},
 				{
 					type: 'number',
@@ -461,6 +467,7 @@ export function UpdateActions(self: ModuleInstance): void {
 					id: 'content',
 					label: 'Message text',
 					default: '',
+					useVariables: true,
 				},
 			],
 			callback: async (event: ActionEvent) => {
@@ -563,6 +570,7 @@ export function UpdateActions(self: ModuleInstance): void {
 					id: 'content',
 					label: 'New message text',
 					default: '',
+					useVariables: true,
 				},
 			],
 			callback: async (event: ActionEvent) => {
@@ -582,6 +590,7 @@ export function UpdateActions(self: ModuleInstance): void {
 					id: 'action',
 					label: 'Action',
 					default: 'toggle',
+					disableAutoExpression: true,
 					choices: [
 						{ id: 'toggle', label: 'Toggle' },
 						{ id: 'enable', label: 'Enable' },
@@ -606,6 +615,7 @@ export function UpdateActions(self: ModuleInstance): void {
 					id: 'enabled',
 					label: 'Glow',
 					default: 'true',
+					disableAutoExpression: true,
 					choices: [
 						{ id: 'true', label: 'Enable' },
 						{ id: 'false', label: 'Disable' },
@@ -631,6 +641,7 @@ export function UpdateActions(self: ModuleInstance): void {
 					id: 'action',
 					label: 'Flash',
 					default: 'enable',
+					disableAutoExpression: true,
 					choices: [
 						{ id: 'enable', label: 'Enable' },
 						{ id: 'disable', label: 'Disable' },
@@ -667,6 +678,7 @@ export function UpdateActions(self: ModuleInstance): void {
 					id: 'text',
 					label: 'Message text (ignored when a stored message number is set)',
 					default: 'Break Time',
+					useVariables: true,
 					tooltip: 'Ad-hoc text. The program is not changed, and unlike a stored message this needs no program loaded.',
 				},
 				{
@@ -748,6 +760,7 @@ export function UpdateActions(self: ModuleInstance): void {
 					id: 'enabled',
 					label: 'Time-is-up display',
 					default: 'true',
+					disableAutoExpression: true,
 					choices: [
 						{ id: 'true', label: 'Enable' },
 						{ id: 'false', label: 'Disable' },
