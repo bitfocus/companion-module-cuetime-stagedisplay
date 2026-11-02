@@ -193,3 +193,80 @@ describe('action option metadata', () => {
 		}
 	})
 })
+
+/**
+ * Toggle Playback has to work from every run state. From idle a bare
+ * `start_session` is rejected by the device ("No active session to start"), so the
+ * preset did nothing on a freshly loaded program while "Start / Resume Session" —
+ * which names the first session — worked. That inconsistency is what these pin.
+ */
+describe('toggle playback across run states', () => {
+	function harness(controlCenter: Record<string, unknown>, sessionList: Record<string, unknown>[]) {
+		const sent: { type: string; payload?: unknown }[] = []
+		const logs: { level: string; message: string }[] = []
+		let defs: Record<string, { callback: (event: { options: Record<string, unknown> }) => unknown }> = {}
+
+		const self = {
+			state: {
+				hello: null,
+				controlCenter,
+				view: null,
+				settings: null,
+				sessionList,
+				messageList: [],
+				messagesFlashing: false,
+				program: null,
+				hydrationComplete: true,
+			},
+			connected: true,
+			log: (level: string, message: string) => logs.push({ level, message }),
+			setActionDefinitions: (value: unknown) => {
+				defs = value as typeof defs
+			},
+			sendCommand: async (type: string, payload?: unknown) => {
+				sent.push({ type, payload })
+			},
+			sendCommandDetailed: async (type: string, payload?: unknown) => {
+				sent.push({ type, payload })
+				return { ok: true, response: { type: 'ack_response' } }
+			},
+		} as unknown as ModuleInstance
+
+		UpdateActions(self)
+		return {
+			press: () => defs.toggle_playback.callback({ options: {} }),
+			sent,
+			logs,
+		}
+	}
+
+	const sessions = [
+		{ id: 's1', index: 0, name: 'Opening', mode: 'countdown' },
+		{ id: 's2', index: 1, name: 'Keynote', mode: 'countup' },
+	]
+
+	it('starts the first session from idle, instead of sending a command the device rejects', async () => {
+		const h = harness({ timer_run_state: 'idle', current_session_index: -1 }, sessions)
+		await h.press()
+		expect(h.sent).toEqual([{ type: 'start_session', payload: { session_id: 's1' } }])
+	})
+
+	it('resumes a paused session without renaming it', async () => {
+		const h = harness({ timer_run_state: 'paused', current_session_index: 1, current_session_id: 's2' }, sessions)
+		await h.press()
+		expect(h.sent).toEqual([{ type: 'start_session', payload: {} }])
+	})
+
+	it('pauses a running session', async () => {
+		const h = harness({ timer_run_state: 'running', current_session_index: 0, current_session_id: 's1' }, sessions)
+		await h.press()
+		expect(h.sent).toEqual([{ type: 'pause_session', payload: undefined }])
+	})
+
+	it('sends nothing from idle when the program holds no session', async () => {
+		const h = harness({ timer_run_state: 'idle', current_session_index: -1 }, [])
+		await h.press()
+		expect(h.sent).toEqual([])
+		expect(h.logs.some((entry) => entry.level === 'debug')).toBe(true)
+	})
+})

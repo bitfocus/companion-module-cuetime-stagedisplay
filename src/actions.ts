@@ -87,9 +87,19 @@ export function UpdateActions(self: ModuleInstance): void {
 				// `timer_run_state` distinguishes paused from idle, which `is_playing` could not.
 				if (self.state.controlCenter?.timer_run_state === 'running') {
 					self.sendCommand('pause_session')
-				} else {
-					self.sendCommand('start_session')
+					return
 				}
+
+				// From idle a bare `start_session` is rejected ("No active session to start"),
+				// which is why this toggle did nothing on a freshly loaded program. Build the
+				// start the same way "Start / Resume Session" does: from idle that names the
+				// first session, so one press loads and starts it.
+				const built = buildStartSession(self.state)
+				if (!built.ok) {
+					self.log('debug', `Toggle playback: ${built.reason}; nothing sent`)
+					return
+				}
+				self.sendCommand('start_session', built.payload)
 			},
 		},
 		start_session: {
