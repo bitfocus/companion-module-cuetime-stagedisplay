@@ -4,7 +4,7 @@ import { UpdateActions } from './actions.ts'
 import { UpdateFeedbacks } from './feedbacks.ts'
 import { UpdateVariableDefinitions } from './variables.ts'
 import { UpdatePresets } from './presets.ts'
-import { extractVariableValues, getEffectiveHost, getEffectivePort } from './logic.ts'
+import { DEFAULT_PORT, extractVariableValues, getEffectiveEndpoint } from './logic.ts'
 import { ProtocolClient } from './protocol/client.ts'
 import type { ClientStatus, ResponseResult } from './protocol/client.ts'
 import { applyEvent, applyResponse, createInitialState } from './protocol/state.ts'
@@ -99,8 +99,16 @@ class ModuleInstanceImpl extends InstanceBase<ModuleInstanceTypes> implements Mo
 	private connect(): void {
 		this.client?.stop()
 
-		const host = this.resolveHost()
-		const port = Number(this.resolvePort())
+		const { host, port: portText } = getEffectiveEndpoint(this.config)
+		if (!host) {
+			// No address yet is a configuration problem, not a network failure: connecting
+			// to `ws://:8081` just throws "Invalid URL" on every retry and fills the log.
+			this.client = null
+			this.updateStatus(InstanceStatus.BadConfig, 'Select a discovered display or enter an IP address')
+			return
+		}
+
+		const port = Number(portText || DEFAULT_PORT)
 
 		this.client = new ProtocolClient({
 			host,
@@ -203,14 +211,6 @@ class ModuleInstanceImpl extends InstanceBase<ModuleInstanceTypes> implements Mo
 		)
 	}
 
-	private resolveHost(): string {
-		return getEffectiveHost(this.config)
-	}
-
-	private resolvePort(): string {
-		return getEffectivePort(this.config)
-	}
-
 	getConfigFields(): SomeCompanionConfigField[] {
 		return [
 			{
@@ -225,7 +225,7 @@ class ModuleInstanceImpl extends InstanceBase<ModuleInstanceTypes> implements Mo
 				label: 'Target IP (manual)',
 				width: 8,
 				regex: Regex.IP,
-				isVisibleExpression: '$(cuetime-display:cuetime-display) == null',
+				isVisibleExpression: '$(options:cuetime-display) == null',
 			},
 			{
 				type: 'textinput',
@@ -234,7 +234,7 @@ class ModuleInstanceImpl extends InstanceBase<ModuleInstanceTypes> implements Mo
 				width: 4,
 				regex: Regex.PORT,
 				default: '8081',
-				isVisibleExpression: '$(cuetime-display:cuetime-display) == null',
+				isVisibleExpression: '$(options:cuetime-display) == null',
 			},
 		]
 	}

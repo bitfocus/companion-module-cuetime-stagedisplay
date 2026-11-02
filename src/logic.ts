@@ -4,17 +4,53 @@ import { clampPercent } from './progress.ts'
 
 // ---- Host/port resolution ----
 
-/** Prefers the Bonjour-discovered device, falling back to the manually entered host. */
-export function getEffectiveHost(config: Pick<Config, 'host' | 'cuetime-display'>): string {
-	if (config['cuetime-display']) {
-		return config['cuetime-display']
+/** The WebSocket transport lives on port 8081 (HTTP is 8080 and unused here). */
+export const DEFAULT_PORT = '8081'
+
+/**
+ * Splits a discovery value into host and port.
+ *
+ * Companion stores a chosen Bonjour service as `<address>:<port>` — its
+ * `BonjourDeviceInputField` builds the choice id as `${address}:${port}` — so the
+ * value is **not** a bare host. Treating it as one produced
+ * `ws://192.168.1.50:8081:8081`, which `new URL()` rejects, so discovery could
+ * never connect. Split on the last colon, and keep a bracketed IPv6 literal whole.
+ */
+export function splitHostPort(value: string): { host: string; port: string } {
+	const text = value.trim()
+	if (text.startsWith('[')) {
+		const end = text.indexOf(']')
+		if (end > 0) {
+			return { host: text.slice(1, end), port: text.slice(end + 1).replace(/^:/, '') }
+		}
 	}
-	return config.host || ''
+	const index = text.lastIndexOf(':')
+	if (index > 0) {
+		const tail = text.slice(index + 1)
+		const colons = text.split(':').length - 1
+		// One colon and a numeric tail is `host:port`. More colons without brackets is a
+		// bare IPv6 literal (`fe80::1`), where the tail only looks like a port.
+		if (colons === 1 && /^\d+$/.test(tail)) {
+			return { host: text.slice(0, index), port: tail }
+		}
+	}
+	return { host: text, port: '' }
 }
 
-/** The WebSocket transport lives on port 8081 (HTTP is 8080 and unused here). */
-export function getEffectivePort(config: Pick<Config, 'port'>): string {
-	return config.port || '8081'
+/**
+ * The endpoint to connect to: the discovered device when one is chosen (its own
+ * host *and* port), otherwise the manually entered host and port.
+ */
+export function getEffectiveEndpoint(config: Pick<Config, 'host' | 'port' | 'cuetime-display'>): {
+	host: string
+	port: string
+} {
+	const discovered = config['cuetime-display']
+	if (discovered) {
+		const { host, port } = splitHostPort(discovered)
+		return { host, port: port || DEFAULT_PORT }
+	}
+	return { host: (config.host || '').trim(), port: config.port || DEFAULT_PORT }
 }
 
 // ---- Time formatting ----

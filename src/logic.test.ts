@@ -2,8 +2,8 @@ import { describe, it, expect } from 'vitest'
 import {
 	extractVariableValues,
 	formatTime,
-	getEffectiveHost,
-	getEffectivePort,
+	getEffectiveEndpoint,
+	splitHostPort,
 	resolveSessionId,
 	resolveMessageIdByPosition,
 	sessionPosition,
@@ -53,18 +53,53 @@ describe('formatTime', () => {
 })
 
 describe('host and port resolution', () => {
-	it('prefers the Bonjour-discovered device over the manual host', () => {
-		expect(getEffectiveHost({ host: '10.0.0.5', 'cuetime-display': 'display.local' })).toBe('display.local')
+	// Companion stores a chosen Bonjour service as `<address>:<port>` (its
+	// BonjourDeviceInputField builds the choice id that way), so a discovered value
+	// is not a bare host. Treating it as one appended the port a second time and
+	// produced `ws://192.168.1.50:8081:8081`, which `new URL()` rejects — the
+	// discovery feature could never connect.
+	it('splits the value Companion stores for a discovered display', () => {
+		expect(splitHostPort('192.168.1.50:8081')).toEqual({ host: '192.168.1.50', port: '8081' })
 	})
 
-	it('falls back to the manual host, then to empty', () => {
-		expect(getEffectiveHost({ host: '10.0.0.5', 'cuetime-display': null })).toBe('10.0.0.5')
-		expect(getEffectiveHost({ host: '', 'cuetime-display': null })).toBe('')
+	it('uses the discovered port instead of the hidden manual one', () => {
+		expect(getEffectiveEndpoint({ host: '10.0.0.5', port: '9999', 'cuetime-display': '192.168.1.50:9000' })).toEqual({
+			host: '192.168.1.50',
+			port: '9000',
+		})
 	})
 
-	it('defaults to the WebSocket port, not the HTTP one', () => {
-		expect(getEffectivePort({ port: '8081' })).toBe('8081')
-		expect(getEffectivePort({ port: '' })).toBe('8081')
+	it('accepts a discovered value without a port and defaults to the WebSocket port', () => {
+		expect(getEffectiveEndpoint({ host: '', port: '8081', 'cuetime-display': 'display.local' })).toEqual({
+			host: 'display.local',
+			port: '8081',
+		})
+	})
+
+	it('keeps a bracketed IPv6 literal whole', () => {
+		expect(splitHostPort('[fe80::1]:8081')).toEqual({ host: 'fe80::1', port: '8081' })
+		expect(splitHostPort('[fe80::1]')).toEqual({ host: 'fe80::1', port: '' })
+		// An unbracketed IPv6 address has colons but no port.
+		expect(splitHostPort('fe80::1')).toEqual({ host: 'fe80::1', port: '' })
+	})
+
+	it('builds a URL the WebSocket client accepts — the doubling regression', () => {
+		const endpoint = getEffectiveEndpoint({ host: '', port: '8081', 'cuetime-display': '192.168.1.50:8081' })
+		expect(() => new URL(`ws://${endpoint.host}:${endpoint.port}`)).not.toThrow()
+		expect(`ws://${endpoint.host}:${endpoint.port}`).toBe('ws://192.168.1.50:8081')
+	})
+
+	it('falls back to the manual host and port, then to empty', () => {
+		expect(getEffectiveEndpoint({ host: '10.0.0.5', port: '8081', 'cuetime-display': null })).toEqual({
+			host: '10.0.0.5',
+			port: '8081',
+		})
+		expect(getEffectiveEndpoint({ host: '', port: '', 'cuetime-display': null })).toEqual({
+			host: '',
+			port: '8081',
+		})
+		// The empty host is what makes `connect` report BadConfig instead of retrying.
+		expect(getEffectiveEndpoint({ host: '   ', port: '', 'cuetime-display': null }).host).toBe('')
 	})
 })
 
