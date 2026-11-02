@@ -2,30 +2,14 @@ node_modules/
 package-lock.json
 /pkg
 /*.tgz
-DEBUG-*/
-/.yarn/cache
-/.yarn/install-state.gz
-/.yarn/unplugged
-/.yarn/build-state.yml
-/.yarn/patches
-/.yarn/plugins
-/.yarn/sdks
-/.yarn/versions
+DEBUG-*
+/.yarn
+/.vscode
 wget-log
 yarn-error.log
 /dist
 /src/generated-icons.ts
 
-
-
-# Beads (bd) tooling, agent hooks and Dolt runtime — local only, never tracked in this repo.
-# `.beads*` catches .beads/, .beads-credential-key, .beads.gate.lock, backups, etc.
-.beads*
-.beads-credential-key
-.dolt/
-*.db
-*.gate.lock*
-.agents/skills/beads/
 .codex/
 .cursor/
 
