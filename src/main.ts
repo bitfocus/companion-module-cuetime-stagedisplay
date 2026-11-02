@@ -1,7 +1,7 @@
 import { InstanceBase, Regex, InstanceStatus, InstanceTypes, SomeCompanionConfigField } from '@companion-module/base'
 import type { JsonObject } from '@companion-module/base'
 import { UpdateActions } from './actions.ts'
-import { UpdateFeedbacks } from './feedbacks.ts'
+import { FEEDBACK_IDS, UpdateFeedbacks } from './feedbacks.ts'
 import { UpdateVariableDefinitions } from './variables.ts'
 import { UpdatePresets } from './presets.ts'
 import { DEFAULT_PORT, extractVariableValues, getEffectiveEndpoint } from './logic.ts'
@@ -42,24 +42,6 @@ export interface ModuleInstance extends InstanceBase<ModuleInstanceTypes> {
 	updateVariableDefinitions(): void
 	updatePresets(): void
 }
-
-/** Every feedback this module defines; refreshed in one pass whenever state changes. */
-const FEEDBACK_IDS = [
-	'is_connected',
-	'is_playing',
-	'is_paused',
-	'is_idle',
-	'is_glowing',
-	'is_blackout',
-	'is_flashing',
-	'has_previous_session',
-	'no_previous_session',
-	'has_next_session',
-	'no_next_session',
-	'message_showing',
-	'is_time_up_display',
-	'is_time_up_flashing',
-] as const
 
 class ModuleInstanceImpl extends InstanceBase<ModuleInstanceTypes> implements ModuleInstance {
 	public config!: Config

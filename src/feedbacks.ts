@@ -22,6 +22,32 @@ import { renderBarImage, renderBarText } from './progress.ts'
 const THICKNESS_MIN_PERCENT = 4
 const THICKNESS_MAX_PERCENT = 100
 
+/**
+ * Every feedback this module defines, refreshed in one pass whenever state changes.
+ *
+ * `checkFeedbacks` is the only thing that makes Companion re-run a feedback, so a
+ * feedback missing from this list is drawn once and then frozen — which is what
+ * happened to `progress_bar`. It lives beside the definitions, and a unit test
+ * (`feedbacks.test.ts`) fails if the two ever drift apart.
+ */
+export const FEEDBACK_IDS = [
+	'is_connected',
+	'is_playing',
+	'is_paused',
+	'is_idle',
+	'is_glowing',
+	'is_blackout',
+	'is_flashing',
+	'has_previous_session',
+	'no_previous_session',
+	'has_next_session',
+	'no_next_session',
+	'message_showing',
+	'is_time_up_display',
+	'is_time_up_flashing',
+	'progress_bar',
+] as const
+
 export function UpdateFeedbacks(self: ModuleInstance): void {
 	self.setFeedbackDefinitions({
 		is_connected: {
