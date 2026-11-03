@@ -68,7 +68,7 @@
 			"yarn lint:raw --fix"
 		],
 		"{schemas/protocol-schema.json,scripts/generate-protocol.mjs}": [
-			"sh -c 'yarn generate-protocol && git add src/protocol/generated.ts'"
+			"yarn generate-protocol"
 		]
 	}
 }

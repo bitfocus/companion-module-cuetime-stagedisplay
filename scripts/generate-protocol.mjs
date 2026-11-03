@@ -131,8 +131,14 @@ function emitUnion(unionDef, union, unionName) {
 	out.push('')
 	out.push(`export type ${unionName}Type = (typeof ${unionName.toUpperCase()}_TYPES)[number]`)
 	out.push('')
-	out.push(`const ${unionName.toUpperCase()}_TYPE_SET: ReadonlySet<string> = new Set(${unionName.toUpperCase()}_TYPES)`)
-	out.push('')
+	// The membership set is only used by the inbound parsers (Response/Event); emitting one
+	// for Command would be dead code, which `noUnusedLocals` now rejects.
+	if (unionName !== 'Command') {
+		out.push(
+			`const ${unionName.toUpperCase()}_TYPE_SET: ReadonlySet<string> = new Set(${unionName.toUpperCase()}_TYPES)`,
+		)
+		out.push('')
+	}
 
 	for (const h of helpers) {
 		out.push(emitInterface(typeName(union, h), defs[h]))

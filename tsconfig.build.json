@@ -1,4 +1,21 @@
 {
-	"extends": "./tsconfig.json",
-	"exclude": ["node_modules", "dist", "src/**/*.test.ts", "src/protocol/fixtures.ts"]
+	"extends": "@companion-module/tools/tsconfig/node26/recommended.json",
+	"include": ["src/**/*.ts"],
+	"exclude": [
+		"node_modules/**",
+		"src/**/*spec.ts",
+		"src/**/__tests__/*",
+		"src/**/__mocks__/*",
+		"src/**/*.test.ts",
+		"src/protocol/fixtures.ts"
+	],
+	"compilerOptions": {
+		"outDir": "./dist",
+		"rootDir": "./src",
+		"verbatimModuleSyntax": true,
+		// This module imports its own files with explicit `.ts` extensions, so tsc has to
+		// rewrite them to `.js` in the emitted output. Everything else comes from the
+		// template's node26 preset (strict, noUnusedLocals, noImplicitReturns, …).
+		"rewriteRelativeImportExtensions": true
+	}
 }

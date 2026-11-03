@@ -1,5 +1,6 @@
 import WebSocket from 'ws'
-import { buildCommand, CommandType, CommandPayloads, Event, Response, isResponse, parseInbound } from './generated.ts'
+import { buildCommand, isResponse, parseInbound } from './generated.ts'
+import type { CommandPayloads, CommandType, Event, Response } from './generated.ts'
 
 /** Connection lifecycle as the module sees it. `live` means hello was received. */
 export type ClientStatus = 'disconnected' | 'connecting' | 'live'

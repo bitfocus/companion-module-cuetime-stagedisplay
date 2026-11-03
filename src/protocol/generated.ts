@@ -56,8 +56,6 @@ export const COMMAND_TYPES = [
 
 export type CommandType = (typeof COMMAND_TYPES)[number]
 
-const COMMAND_TYPE_SET: ReadonlySet<string> = new Set(COMMAND_TYPES)
-
 export interface CommandJsonProgram {
 	settings: CommandJsonProgramSettings
 	sessions: CommandJsonSession[]

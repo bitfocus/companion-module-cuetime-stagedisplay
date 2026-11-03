@@ -1,4 +1,5 @@
-import { InstanceBase, Regex, InstanceStatus, InstanceTypes, SomeCompanionConfigField } from '@companion-module/base'
+import { InstanceBase, Regex, InstanceStatus } from '@companion-module/base'
+import type { InstanceTypes, SomeCompanionConfigField } from '@companion-module/base'
 import type { JsonObject } from '@companion-module/base'
 import { UpdateActions } from './actions.ts'
 import { FEEDBACK_IDS, UpdateFeedbacks } from './feedbacks.ts'
