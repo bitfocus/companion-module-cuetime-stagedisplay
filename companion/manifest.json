@@ -5,7 +5,7 @@
 	"name": "CueTime Stage Display",
 	"shortname": "cuetime",
 	"description": "Module to control CueTime Stage Displays over WebSocket",
-	"version": "0.1.0",
+	"version": "0.1.2",
 	"license": "MIT",
 	"repository": "git+https://github.com/bitfocus/companion-module-cuetime-stagedisplay.git",
 	"bugs": "https://github.com/bitfocus/companion-module-cuetime-stagedisplay/issues",
@@ -30,11 +30,5 @@
 			"protocol": "tcp"
 		}
 	},
-	"keywords": [
-		"cuetime",
-		"stage display",
-		"timer",
-		"countdown",
-		"presenter"
-	]
+	"keywords": ["cuetime", "stage display", "timer", "countdown", "presenter"]
 }
